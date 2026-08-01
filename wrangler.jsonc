@@ -1,0 +1,13 @@
+{
+  // Static-assets-only Worker: serves the Vite build output in ./dist.
+  // Docs: https://developers.cloudflare.com/workers/static-assets/
+  "name": "mandelbrot-explorer",
+  "compatibility_date": "2025-01-01",
+  "assets": {
+    "directory": "./dist",
+    // The app is a BrowserRouter SPA with four engine routes (/, /js, /gl,
+    // /simd). Without this, a direct hit or a refresh on anything but "/"
+    // looks for a file that was never built and 404s.
+    "not_found_handling": "single-page-application"
+  }
+}

@@ -5,10 +5,14 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "pnpm build:wasm && tsc && vite build",
+    "build": "pnpm build:wasm && pnpm build:rust && pnpm build:ci",
+    "//build:ci": "What a static host builds: the wasm binaries are committed, and neither Go nor Rust exists on the build machine.",
+    "build:ci": "tsc && vite build",
     "lint": "eslint . --ext ts,tsx --report-unused-disable-directives --max-warnings 0",
     "preview": "vite preview",
-    "build:wasm": "cd go && GOOS=js GOARCH=wasm go build -ldflags=\"-s -w\" -o ../public/main.wasm"
+    "build:wasm": "cd go && GOOS=js GOARCH=wasm go build -ldflags=\"-s -w\" -o ../public/main.wasm",
+    "//build:rust": "Two binaries from one source: the vectorised kernel and its scalar control.",
+    "build:rust": "cd rust && RUSTFLAGS=\"-C target-feature=+simd128\" cargo build --release --target wasm32-unknown-unknown --target-dir target/simd && cargo build --release --target wasm32-unknown-unknown --target-dir target/scalar && cp target/simd/wasm32-unknown-unknown/release/mandel.wasm ../public/mandel-simd.wasm && cp target/scalar/wasm32-unknown-unknown/release/mandel.wasm ../public/mandel-scalar.wasm"
   },
   "dependencies": {
     "@tailwindcss/vite": "^4.1.7",

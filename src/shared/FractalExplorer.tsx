@@ -3,6 +3,7 @@ import { StatsPanel } from "./panels/StatsPanel";
 import { ControlsPanel } from "./panels/ControlsPanel";
 import { ReadoutPanel } from "./panels/ReadoutPanel";
 import { HudRail } from "./panels/HudRail";
+import { EngineSwitch } from "./panels/EngineSwitch";
 import { Badge, Panel } from "./hud";
 import { useZoomPan } from "../js/hooks/useZoomPan";
 import { useHistory } from "../js/hooks/useHistory";
@@ -474,6 +475,7 @@ export function FractalExplorer({ engineName, createWorker, poolSize, urlExtras 
             {poolSize} {poolSize > 1 ? "workers" : "worker"}
           </span>
         </Panel>
+        <EngineSwitch current={window.location.pathname} />
         {zoomPan.isDragging && <Badge tone="pink">Live</Badge>}
       </div>
 

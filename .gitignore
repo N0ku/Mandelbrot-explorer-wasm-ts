@@ -12,6 +12,14 @@ dist
 dist-ssr
 *.local
 
+# Rust build output — the two .wasm artefacts it produces are committed under
+# public/, so a fresh clone runs with no Rust toolchain installed.
+rust/target
+
+# Measurement output (tools/fidelity.mjs, tools/bench.mjs)
+fidelity-results.json
+bench-results.json
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json

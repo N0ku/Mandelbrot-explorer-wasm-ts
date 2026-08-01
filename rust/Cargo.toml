@@ -1,0 +1,17 @@
+[package]
+name = "mandel"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+crate-type = ["cdylib"]
+
+# Small and fast: no unwinding tables, one codegen unit, symbols stripped.
+# The point of this crate is partly to show what a kernel costs when it brings
+# no runtime with it — Go ships 1.9 MB, this lands in the tens of kilobytes.
+[profile.release]
+opt-level = 3
+lto = true
+panic = "abort"
+codegen-units = 1
+strip = true

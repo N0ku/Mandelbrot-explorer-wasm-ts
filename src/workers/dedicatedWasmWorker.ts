@@ -11,10 +11,17 @@ let wasmReady = false;
 async function initDedicatedWasm(): Promise<void> {
   try {
     const go = new (self as any).Go();
-    const result = await WebAssembly.instantiateStreaming(
-      fetch(import.meta.env.BASE_URL + "main.wasm"),
-      go.importObject
-    );
+    const url = import.meta.env.BASE_URL + "main.wasm";
+    let result: WebAssembly.WebAssemblyInstantiatedSource;
+    try {
+      result = await WebAssembly.instantiateStreaming(fetch(url), go.importObject);
+    } catch {
+      // instantiateStreaming refuses anything not served as application/wasm,
+      // and that mis-configuration is the classic way a WASM deploy dies with
+      // an error message that explains nothing. Fall back instead of breaking.
+      const bytes = await fetch(url).then((r) => r.arrayBuffer());
+      result = await WebAssembly.instantiate(bytes, go.importObject);
+    }
     // go.run starts main() which registers the bindings synchronously before
     // blocking on its channel — do not await it (it resolves on program exit).
     go.run(result.instance);
