@@ -1,7 +1,7 @@
 {
   // Static-assets-only Worker: serves the Vite build output in ./dist.
   // Docs: https://developers.cloudflare.com/workers/static-assets/
-  "name": "mandelbrot-explorer",
+  "name": "mandelbrot-explorer-wasm-ts",
   "compatibility_date": "2025-01-01",
   "assets": {
     "directory": "./dist",
