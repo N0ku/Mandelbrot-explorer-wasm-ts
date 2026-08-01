@@ -29,16 +29,16 @@ const VIEWPORT = [1440, 900];
 // Engines. `workers` is only meaningful for the pooled ones; WebGL2 and the TS
 // route are single by nature.
 const ENGINES = [
-  { key: "wasm", label: "Go · WASM ×6", route: "/", extra: "" },
+  { key: "wasm", label: "Go · WASM ×6", route: "/go", extra: "" },
   { key: "js", label: "TypeScript", route: "/js", extra: "" },
   { key: "gl", label: "WebGL2", route: "/gl", extra: "" },
-  { key: "simd", label: "Rust · SIMD ×6", route: "/simd", extra: "" },
-  { key: "scalar", label: "Rust · scalar ×6", route: "/simd", extra: "&simd=0" },
+  { key: "simd", label: "Rust · SIMD ×6", route: "/", extra: "" },
+  { key: "scalar", label: "Rust · scalar ×6", route: "/", extra: "&simd=0" },
   // The "one instance each" comparison: strip the pool and the engines face
   // the single TS worker on equal terms.
-  { key: "wasm1", label: "Go · WASM ×1", route: "/", extra: "&workers=1" },
-  { key: "simd1", label: "Rust · SIMD ×1", route: "/simd", extra: "&workers=1" },
-  { key: "scalar1", label: "Rust · scalar ×1", route: "/simd", extra: "&workers=1&simd=0" },
+  { key: "wasm1", label: "Go · WASM ×1", route: "/go", extra: "&workers=1" },
+  { key: "simd1", label: "Rust · SIMD ×1", route: "/", extra: "&workers=1" },
+  { key: "scalar1", label: "Rust · scalar ×1", route: "/", extra: "&workers=1&simd=0" },
 ];
 
 const SCENES = [

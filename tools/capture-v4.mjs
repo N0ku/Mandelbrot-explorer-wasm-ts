@@ -125,7 +125,7 @@ await shot("10-engine-switch.png");
 await setViewport(1400, 1200, 1);
 for (const [file, route] of [
   ["11-float32-gl.png", "/gl"],
-  ["12-float64-cpu.png", "/"],
+  ["12-float64-cpu.png", "/go"],
 ]) {
   await send("Page.navigate", { url: `${BASE}${route}${DEEP}` });
   await waitForCount(1);

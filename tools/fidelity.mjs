@@ -37,7 +37,7 @@ const ENGINES = (process.argv[3] ?? "js,gl").split(",").filter(Boolean);
 // percentage means something. Stated in the published methodology.
 const SIZE = 600;
 
-const ROUTES = { wasm: "/", js: "/js", gl: "/gl", simd: "/simd" };
+const ROUTES = { wasm: "/go", js: "/js", gl: "/gl", simd: "/" };
 const LABELS = { wasm: "Go · WASM", js: "TypeScript", gl: "WebGL2", simd: "Rust · SIMD" };
 
 // The seahorse point stays on the boundary at every depth.

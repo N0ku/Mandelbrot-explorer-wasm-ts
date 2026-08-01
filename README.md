@@ -21,10 +21,10 @@ timed.
 
 | Route | Engine |
 |---|---|
-| `/` | Go compiled to WebAssembly, up to 6 Web Workers, one full WASM instance each |
+| `/` | **Rust** compiled to wasm with `+simd128`, up to 6 workers (`?simd=0` for the scalar control). Also reachable as `/simd`. |
+| `/go` | Go compiled to WebAssembly, up to 6 Web Workers, one full WASM instance each |
 | `/js` | Pure TypeScript, one Web Worker |
 | `/gl` | A WebGL2 fragment shader on the GPU, one OffscreenCanvas |
-| `/simd` | Rust compiled to wasm with `+simd128`, up to 6 workers (`?simd=0` for the scalar control) |
 
 Copy the query string from one route to another and you are comparing the
 same frame, pixel for pixel — every route shares the same adaptive iteration
@@ -181,8 +181,8 @@ worker computes horizontal bands of the frame, sorted centre-out. `?workers=N`
 | `size` | Frame side in pixels (100..2000) |
 | `julia`, `juliaRe`, `juliaIm` | Julia mode and its constant |
 | `iter` | Explicit iteration override (benchmarks); cleared on the next zoom |
-| `workers` | Worker-pool size 1..6 (routes `/` and `/simd`) |
-| `simd` | `0` loads the scalar Rust binary instead of the vectorised one (route `/simd`) |
+| `workers` | Worker-pool size 1..6 (routes `/` and `/go`) |
+| `simd` | `0` loads the scalar Rust binary instead of the vectorised one (route `/`) |
 | `mode` | v1 strategy selector — accepted and ignored, kept for old URLs |
 
 ## v4: answering the SIMD question

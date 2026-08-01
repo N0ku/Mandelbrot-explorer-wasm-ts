@@ -160,7 +160,7 @@ await setViewport(1440, 900, 2);
 
 const heights = [];
 for (const [file, route] of [
-  ["08-bench-wasm.png", "/"],
+  ["08-bench-wasm.png", "/go"],
   ["09-bench-ts.png", "/js"],
 ]) {
   await send("Page.navigate", { url: `${BASE}${route}${SCENE_BENCH}` });

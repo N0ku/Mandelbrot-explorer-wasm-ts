@@ -11,10 +11,15 @@ function RouterApp() {
   return (
     <Router>
       <Routes>
-        <Route path="/" element={<WasmApp />} />
+        {/* Rust is the landing engine: fastest of the CPU three, bit-identical
+            to Go at every depth, and under 20 KB of wasm. Go keeps its own
+            route, and /simd stays as an alias so links shared or benchmarked
+            before the swap still resolve. */}
+        <Route path="/" element={<SimdApp />} />
+        <Route path="/simd" element={<SimdApp />} />
+        <Route path="/go" element={<WasmApp />} />
         <Route path="/js" element={<JsApp />} />
         <Route path="/gl" element={<GlApp />} />
-        <Route path="/simd" element={<SimdApp />} />
       </Routes>
     </Router>
   );

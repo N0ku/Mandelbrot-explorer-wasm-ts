@@ -9,20 +9,24 @@ import { Panel } from "../hud";
 // engine a cold start, which is what the benchmark protocol assumes anyway.
 
 const ENGINES = [
-  { path: "/", label: "Go" },
+  { path: "/", label: "Rust" },
+  { path: "/go", label: "Go" },
   { path: "/js", label: "TS" },
   { path: "/gl", label: "GL" },
-  { path: "/simd", label: "Rust" },
 ];
 
 export function EngineSwitch({ current }: { current: string }) {
   const search = typeof window === "undefined" ? "" : window.location.search;
+  // "/" and "/simd" are the same engine — the alias has to light up the same
+  // button, or arriving from an older link looks like no engine is selected.
+  const isActive = (path: string) =>
+    path === "/" ? current === "/" || current === "/simd" : current === path;
 
   return (
     <Panel className="fx-enter-right pointer-events-auto flex items-center gap-1 px-2 py-1.5">
       <span className="fx-microlabel pr-1 text-grey/45">Engine</span>
       {ENGINES.map((e) => {
-        const active = e.path === current;
+        const active = isActive(e.path);
         return (
           <a
             key={e.path}
