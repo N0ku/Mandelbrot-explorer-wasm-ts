@@ -28,7 +28,7 @@ timed.
 | `/gl` | A WebGL2 fragment shader on the GPU, one OffscreenCanvas |
 
 Copy the query string from one route to another and you are comparing the
-same frame, pixel for pixel — every route shares the same adaptive iteration
+same frame, pixel for pixel, every route shares the same adaptive iteration
 formula, `min(2000, max(100, floor(1000 × zoom^0.3)))`. The engine switch in
 the HUD does exactly that, carrying the current view across.
 
@@ -55,7 +55,7 @@ Keyboard: `+`/`-` zoom · arrows pan · `s` stats panel · `b`/`n` history ·
 
 The first version of this project measured something surprising: the Go engine
 was losing to TypeScript whenever parallelism wasn't hiding its boundary. Each
-frame left Go as a PNG re-encoded to base64 inside a JS string — encoded
+frame left Go as a PNG re-encoded to base64 inside a JS string, encoded
 twice, decoded ten times per frame. Below the worker-pool threshold, the same
 kernel lost 107.6 ms to 81.6 ms.
 
@@ -75,7 +75,7 @@ v2 deletes that boundary instead of hiding it:
 
 ## The kernel, twice
 
-Go — `go/fractal/kernel.go`:
+Go `go/fractal/kernel.go`:
 
 ```go
 iterations := 0
@@ -89,7 +89,7 @@ for x2+y2 < 4 && iterations < maxIter {
 }
 ```
 
-TypeScript — `src/js/lib/ts-strategies.ts`:
+TypeScript `src/js/lib/ts-strategies.ts`:
 
 ```ts
 let iterations = 0;
@@ -104,14 +104,14 @@ while (x2 + y2 < 4 && iterations < params.maxIter) {
 ```
 
 Three multiplications per iteration on both sides, the same IEEE-754 doubles,
-the same escape radius. The same function serves Mandelbrot *and* Julia — only
+the same escape radius. The same function serves Mandelbrot *and* Julia  only
 the initialisation of `(c, z)` is flipped.
 
 ## What the numbers say
 
 Measured 2026-08-01, production build, Chromium 131 headless, 12 logical
 cores. 1000×1000 frames, shared iteration formula (every row comparable).
-Timed window: full-resolution dispatch to the last `putImageData` — the
+Timed window: full-resolution dispatch to the last `putImageData`  the
 preview pass is excluded. Each value is the average of 10 generations of the
 same view after 3 discarded warm-ups (WASM tier-up and JIT).
 
@@ -124,14 +124,14 @@ same view after 3 discarded warm-ups (WASM tier-up and JIT).
 | **One instance each (`?workers=1`)** | **396.9 ms** | 476.7 ms | 1.2× |
 
 The last row is the one v1 lost. With the PNG/base64 boundary gone, a single
-WASM instance beats a single TS worker on the same 1000×1000 frame — the win
+WASM instance beats a single TS worker on the same 1000×1000 frame  the win
 no longer depends on parallelism.
 
 ### How much to trust these
 
 Absolute timings drift with machine state far more than you would like. An
 earlier session the same day, same build, gave **109.4 ms** on the reference
-scene instead of 123.6 — 13% apart with no code change. That was checked
+scene instead of 123.6  13% apart with no code change. That was checked
 rather than assumed: the previous commit was rebuilt and re-measured back to
 back and produced 123.1 ms, i.e. the machine had slowed, not the code.
 
@@ -155,7 +155,7 @@ The explorer is built for motion:
 2. **On settle**, the on-screen pixels are re-projected to the new view, then
    a quarter-resolution preview lands within tens of milliseconds.
 3. **Full-resolution bands** stream over it, centre-out, painted the moment
-   they arrive — no `Promise.all` barrier anywhere.
+   they arrive no `Promise.all` barrier anywhere.
 
 A generation token makes the last request always win: a new gesture purges the
 queue and stale tiles are dropped on arrival, so ghost tiles are impossible.
@@ -170,7 +170,7 @@ a mutex.
 
 The answer is architectural: **up to six complete WASM instances, one per Web
 Worker**, each with its own linear memory (there is no `SharedArrayBuffer`
-here — no COOP/COEP headers). Since v2 renders sub-rectangles natively, each
+here no COOP/COEP headers). Since v2 renders sub-rectangles natively, each
 worker computes horizontal bands of the frame, sorted centre-out. `?workers=N`
 (1..6) pins the pool size for benchmarking.
 
@@ -184,22 +184,22 @@ worker computes horizontal bands of the frame, sorted centre-out. `?workers=N`
 | `iter` | Explicit iteration override (benchmarks); cleared on the next zoom |
 | `workers` | Worker-pool size 1..6 (routes `/` and `/go`) |
 | `simd` | `0` loads the scalar Rust binary instead of the vectorised one (route `/`) |
-| `mode` | v1 strategy selector — accepted and ignored, kept for old URLs |
+| `mode` | v1 strategy selector accepted and ignored, kept for old URLs |
 
 ## v4: answering the SIMD question
 
 This project began in Kotlin, on the JVM, with a hand-written thread pool.
-The advice for going faster there was to add SIMD on top of the threads — and
+The advice for going faster there was to add SIMD on top of the threads and
 that question went unanswered for two rewrites, because **neither engine above
 can reach SIMD at all**: the Go compiler does not auto-vectorise and exposes
 no intrinsics for the wasm target, and JavaScript has had no SIMD primitive
 since `SIMD.js` was abandoned. Answering it needed new engines.
 
-**`/gl` — the GPU.** The kernel becomes a fragment shader in an
+**`/gl` the GPU.** The kernel becomes a fragment shader in an
 `OffscreenCanvas`: one invocation per pixel, thousands in lockstep. That is
 SIMT, SIMD's hardware cousin. It is by far the fastest engine here.
 
-**`/simd` — vectorised Rust, and its control.** `rust/src/lib.rs` compiles to
+**`/simd` the vectorised Rust, and its control.** `rust/src/lib.rs` compiles to
 two binaries, with and without `+simd128`. A `v128` register holds two f64
 lanes, so the ceiling is ×2, not ×4. The hard part is divergence: neighbouring
 pixels escape at different iterations and a vector cannot branch per lane, so
@@ -218,7 +218,7 @@ the Metal backend, 1000×1000, 3 warm-ups discarded, average of 10 runs:
 | TypeScript | 474.7 ms | 391.4 ms |
 
 **The control is the point.** Rust without vectorisation lands within 2% of
-Go, so changing language buys nothing — the whole ×1.59 gain belongs to the
+Go, so changing language buys nothing, the whole ×1.59 gain belongs to the
 vector instructions. Without that row, the win could just as easily have been
 credited to Rust.
 
@@ -245,7 +245,7 @@ smooth region and you measure the location instead of the arithmetic):
 
 (share of pixels differing from the Go reference by more than 8 on a channel)
 
-Rust is **bit-identical** to Go at every depth — which is the best available
+Rust is **bit-identical** to Go at every depth, which is the best available
 proof that the lane masking is correct, since one lane leaking past its escape
 would show up immediately. At ×10⁸ the GPU image is three flat bands of
 colour.
@@ -258,10 +258,10 @@ colour.
 - **No smooth colouring.** The palette indexes the integer iteration count, so
   banding is visible. `n + 1 − log₂(log|z|)` is three lines on each side, but
   the kernel would have to return `|z|²` as well.
-- **1.9 MB × 6 — largely answered.** Every Go worker still loads its own copy
+- **1.9 MB × 6 largely answered.** Every Go worker still loads its own copy
   of the runtime. The Rust binaries put a number on what that costs: under
   20 KB each, 97× smaller, because no runtime travels with them.
-- **`SharedArrayBuffer` — unblocked, not yet used.** The deployment now ships
+- **`SharedArrayBuffer` unblocked, not yet used.** The deployment now ships
   COOP/COEP (`public/_headers`, mirrored into the dev server), so
   `crossOriginIsolated` is true and real wasm threads are finally possible.
   Nothing uses them yet.
@@ -269,11 +269,11 @@ colour.
   usable depth stops around ×10⁴. Emulated double-float arithmetic would push
   it back, at the cost of a much heavier kernel.
 - **A synchronous readback.** `readPixels` blocks the GPU pipeline until the
-  bytes are back in CPU memory — this engine's boundary. An async PBO readback
+  bytes are back in CPU memory this engine's boundary. An async PBO readback
   (`fenceSync` + `getBufferSubData`) would hide it.
 - **DevicePixelRatio.** The canvas backing store is the logical size, so the
   image is stretched on Retina displays. Rendering at DPR would double the
-  workload — and would have to be measured again.
+  workload and would have to be measured again.
 
 ## The interface
 
@@ -282,12 +282,12 @@ square panels, corner brackets, Orbitron micro-labels, tabular figures, cyan
 for the accent. Two things it does that a plain fractal viewer usually skips:
 
 - **A scale bar**, not just a magnification factor. It picks a round 1/2/5×10ⁿ
-  length of the complex plane and draws it — the bar breathes as you zoom and
+  length of the complex plane and draws it the bar breathes as you zoom and
   snaps to the next round number. `×2.0k` tells you how far you came;
   `2×10⁻⁴` tells you what you are looking at.
 - **Coordinates at the precision the zoom actually resolves.** One screen pixel
   is `4/(size·zoom)` units, so the readout carries `⌈log₁₀(size·zoom/4)⌉ + 1`
-  decimals — 4 at zoom 1, 7 at zoom 2 000, 16 at zoom 10¹². A fixed four
+  decimals 4 at zoom 1, 7 at zoom 2 000, 16 at zoom 10¹². A fixed four
   decimals stopped distinguishing adjacent pixels at zoom 40, and the URL
   stopped reproducing a shared view at zoom 4 000; both now follow the zoom.
 
@@ -295,7 +295,7 @@ for the accent. Two things it does that a plain fractal viewer usually skips:
 
 Go 1.24 (stdlib only, `syscall/js`) · Rust 1.97 (no wasm-bindgen) · GLSL ES 3.0 ·
 TypeScript · React 18 · Vite 5 ·
-Tailwind CSS v4 · Web Workers. No animation library — the UI motion is CSS.
+Tailwind CSS v4 · Web Workers. No animation library, the UI motion is CSS.
 
 The project started life from the [wasm-react](https://github.com/akshays-repo/wasm-react)
 template, which supplied the initial Go + React + `wasm_exec.js` wiring.
@@ -314,4 +314,4 @@ template, which supplied the initial Go + React + `wasm_exec.js` wiring.
 
 ## Licence
 
-MIT — see [LICENSE](./LICENSE).
+MIT - see [LICENSE](./LICENSE).
