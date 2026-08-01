@@ -8,6 +8,9 @@
 A Mandelbrot and Julia explorer built to answer one question honestly: **is
 WebAssembly compiled from Go actually faster than plain TypeScript?**
 
+A project I worked on as part of our Technology Watch Report with my classmates: 
+[TODO]
+
 The same escape-time kernel is written twice: once in Go, once as a
 line-for-line TypeScript transcription, and each engine lives on its own route.
 The whole view (position, zoom, iteration depth, Julia constant) is encoded in
