@@ -26,11 +26,35 @@
   font-display: swap;
 }
 
+/* ── Manrope — the portfolio serves it through astro-google-fonts-optimizer,
+      which has no equivalent here, so the woff2 files are vendored directly. ── */
+@font-face {
+  font-family: "Manrope";
+  src: url("/assets/fonts/ManropeRegular.woff2") format("woff2");
+  font-weight: 400;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Manrope";
+  src: url("/assets/fonts/ManropeMedium.woff2") format("woff2");
+  font-weight: 500;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Manrope";
+  src: url("/assets/fonts/ManropeBold.woff2") format("woff2");
+  font-weight: 700;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Manrope";
+  src: url("/assets/fonts/ManropeExtraBold.woff2") format("woff2");
+  font-weight: 800;
+  font-display: swap;
+}
+
 /* ── Design tokens — the same block as the portfolio, so bg-white/2,
-      text-grey/70 and border-white/10 resolve identically here. Manrope is
-      declared but deliberately not loaded: the portfolio doesn't load it
-      either, and the explorer must not look different from the site that
-      showcases it. ─────────────────────────────────────────────────────── */
+      text-grey/70 and border-white/10 resolve identically here. ─────────── */
 @theme {
   --color-green: #16c867;
   --color-grey: #cccccc;
@@ -278,9 +302,22 @@ body {
   border-bottom-color: var(--color-cyan);
 }
 
-/* Keep panels reachable on a short viewport without breaking touch-action. */
+/* Keep panels reachable on a short viewport without breaking touch-action.
+   The cap goes on the frame; the scrolling goes on the content — see .fx-scroll
+   for why those cannot be the same element. */
 .fx-scrollable {
   max-height: calc(100dvh - 6rem);
+}
+
+/* A panel's corner brackets sit 1px OUTSIDE its border on purpose, so they read
+   as resting on it. But an absolutely-positioned child reaching past the
+   bottom-right corner also extends its scroll container's overflow area — so
+   making the frame itself `overflow-y: auto` raised a scrollbar for those 1px.
+   Both bars, in fact: an overflow-y that is not `visible` forces overflow-x to
+   compute as `auto` too. Scrolling an inner wrapper leaves the brackets on the
+   frame, outside the scrolling box, and the 1px stops counting. */
+.fx-scroll {
+  min-height: 0;
   overflow-y: auto;
   touch-action: pan-y;
   scrollbar-width: thin;

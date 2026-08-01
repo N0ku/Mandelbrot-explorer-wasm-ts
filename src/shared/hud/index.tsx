@@ -52,20 +52,29 @@ export function Hatch({ count = 8, className = "" }: { count?: number; className
 export function Panel({
   className = "",
   bracketSize = "0.75rem",
+  scrollable = false,
   children,
   ...rest
 }: {
   className?: string;
   bracketSize?: string;
+  /** Cap the height on a short viewport and let the CONTENT scroll. The frame
+   *  must not be the scroll container: its corner brackets sit 1px outside the
+   *  border by design, and that is enough to raise scrollbars on both axes. */
+  scrollable?: boolean;
   children: ReactNode;
 } & React.HTMLAttributes<HTMLDivElement>) {
   return (
     <div
-      className={cx("relative border border-white/10 bg-dark/88 text-white", className)}
+      className={cx(
+        "relative border border-white/10 bg-dark/88 text-white",
+        scrollable && "flex flex-col fx-scrollable",
+        className
+      )}
       {...rest}
     >
       <CornerBrackets size={bracketSize} offset="-1px" className="text-white/25" />
-      {children}
+      {scrollable ? <div className="fx-scroll">{children}</div> : children}
     </div>
   );
 }

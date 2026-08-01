@@ -38,7 +38,8 @@ export function ControlsPanel({
   return (
     <Panel
       data-hud="controls"
-      className="fx-enter-right fx-scrollable pointer-events-auto w-[15rem] lg:w-[17rem] px-4 py-3"
+      scrollable
+      className="fx-enter-right pointer-events-auto w-[15rem] lg:w-[17rem] px-4 py-3"
     >
       <PanelHeader label="Controls">
         <GhostButton
