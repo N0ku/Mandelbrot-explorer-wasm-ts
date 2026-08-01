@@ -1,15 +1,16 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
-import { StatsPanel } from "../js/components/StatsPanel";
-import { ControlsPanel } from "../js/components/ControlsPanel";
-import { NavigationControls } from "../js/components/NavigationControls";
-import { InfoBar } from "../js/components/InfoBar";
-import { DownloadButton } from "../js/components/DownloadButton";
+import { StatsPanel } from "./panels/StatsPanel";
+import { ControlsPanel } from "./panels/ControlsPanel";
+import { ReadoutPanel } from "./panels/ReadoutPanel";
+import { HudRail } from "./panels/HudRail";
+import { Badge, Panel } from "./hud";
 import { useZoomPan } from "../js/hooks/useZoomPan";
 import { useHistory } from "../js/hooks/useHistory";
 import { useStats } from "../js/hooks/useStats";
 import { useFractalEngine } from "./useFractalEngine";
 import { FractalCanvas } from "./FractalCanvas";
 import { computeIterations } from "./iterations";
+import { coordPrecisionForUrl } from "./format";
 import type { FractalView } from "./renderTypes";
 
 // The whole explorer, shared verbatim by both routes — same host pipeline,
@@ -54,6 +55,14 @@ function readInitialParams() {
   };
 }
 
+/**
+ * How many bands of the current pass have been painted. Exposed on `window`
+ * so the screenshot tooling can catch a frame while it is still streaming;
+ * incrementing an integer costs nothing in the measured window.
+ */
+const tileCounter = { painted: 0 };
+(window as unknown as { __fxTiles: typeof tileCounter }).__fxTiles = tileCounter;
+
 interface PaintedView {
   zoom: number;
   panX: number;
@@ -86,6 +95,7 @@ export function FractalExplorer({ engineName, createWorker, poolSize, urlExtras 
   const frameSeqRef = useRef(0);
   const didInitRef = useRef(false);
   const commitRef = useRef<() => void>(() => {});
+  const downloadRef = useRef<() => void>(() => {});
 
   const engine = useFractalEngine({ createWorker, poolSize });
   const { stats, recordGeneration, resetStats } = useStats();
@@ -209,10 +219,18 @@ export function FractalExplorer({ engineName, createWorker, poolSize, urlExtras 
     }
 
     // 3) Full-resolution pass — streamed bands, timed by the engine.
+    //    The paint callback stays a bare canvas write: it runs on the main
+    //    thread INSIDE the measured window, so no React state, no layout, no
+    //    logging here. The tile counter is a single integer increment, which
+    //    the capture tooling polls to photograph a frame mid-stream.
     setIsGenerating(true);
+    tileCounter.painted = 0;
     const ms = await engine.render(target, {
       bands: poolSize === 1 ? 1 : poolSize * 2,
-      paint: (t) => ctx.putImageData(new ImageData(t.pixels, t.w, t.h), t.x0, t.y0),
+      paint: (t) => {
+        ctx.putImageData(new ImageData(t.pixels, t.w, t.h), t.x0, t.y0);
+        tileCounter.painted++;
+      },
     });
     if (my === frameSeqRef.current) setIsGenerating(false);
     if (ms === null || my !== frameSeqRef.current) return;
@@ -227,9 +245,13 @@ export function FractalExplorer({ engineName, createWorker, poolSize, urlExtras 
     const v = viewRef.current;
     const c = contentRef.current;
     const p = new URLSearchParams();
-    p.set("x", v.panX.toFixed(6));
-    p.set("y", v.panY.toFixed(6));
-    p.set("zoom", v.zoom.toFixed(6));
+    // Precision has to follow the zoom: a fixed 6 decimals stopped resolving
+    // one pixel around zoom 4000, so shared links silently landed elsewhere.
+    const decimals = coordPrecisionForUrl(v.zoom, c.size);
+    p.set("x", v.panX.toFixed(decimals));
+    p.set("y", v.panY.toFixed(decimals));
+    // String() prints the shortest representation that round-trips exactly.
+    p.set("zoom", String(v.zoom));
     p.set("iter", String(iterOverrideRef.current ?? computeIterations(v.zoom)));
     p.set("size", String(c.size));
     p.set("julia", String(c.isJulia));
@@ -270,14 +292,17 @@ export function FractalExplorer({ engineName, createWorker, poolSize, urlExtras 
     commitRef.current();
   }, [size, isJulia, juliaRe, juliaIm]);
 
-  // Keyboard — v1 bindings plus `r` (reset, promised by the UI all along)
-  // and `j` on both routes.
+  // Keyboard — v1 bindings plus `r` (reset, promised by the UI all along),
+  // `j` on both routes and `d` for the download.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.metaKey || e.ctrlKey) return;
       const t = e.target as HTMLElement | null;
       if (t && (t.tagName === "INPUT" || t.tagName === "SELECT" || t.tagName === "TEXTAREA")) return;
-      switch (e.key) {
+      // The help text has always advertised R S B N J in caps, but the switch
+      // only ever matched lowercase — every shortcut died under Caps Lock.
+      const key = e.key.length === 1 ? e.key.toLowerCase() : e.key;
+      switch (key) {
         case "+":
         case "=":
           zoomPan.zoomAtPoint(1.2, zoomPan.mousePosition.x, zoomPan.mousePosition.y);
@@ -289,6 +314,9 @@ export function FractalExplorer({ engineName, createWorker, poolSize, urlExtras 
           break;
         case "s":
           setShowStats((prev) => !prev);
+          break;
+        case "d":
+          downloadRef.current();
           break;
         case "ArrowUp":
           zoomPan.moveInDirection("up");
@@ -350,10 +378,12 @@ export function FractalExplorer({ engineName, createWorker, poolSize, urlExtras 
     }
   };
 
-  // Zoom driven from the controls panel: settle shortly after the last nudge.
-  const zoomAtPointUI = useCallback(
-    (factor: number, px?: number, py?: number) => {
-      zoomPan.zoomAtPoint(factor, px, py);
+  // Zoom from the readout's steppers — anchored at the frame centre, because
+  // the panels live outside the pointer surface and never refresh
+  // `mousePosition`, so anchoring there jumped to a stale, invisible point.
+  const zoomFromUI = useCallback(
+    (factor: number) => {
+      zoomPan.zoomAtPoint(factor, 0.5, 0.5);
       zoomPan.scheduleSettle(150);
     },
     [zoomPan.zoomAtPoint, zoomPan.scheduleSettle]
@@ -371,13 +401,22 @@ export function FractalExplorer({ engineName, createWorker, poolSize, urlExtras 
       URL.revokeObjectURL(url);
     }, "image/png");
   }, [isJulia]);
+  downloadRef.current = handleDownload;
+
+  // The tab title is what tells a viewer which engine is running in a screen
+  // recording.
+  useEffect(() => {
+    document.title = `${engineName} · Mandelbrot`;
+  }, [engineName]);
 
   const displayIter = iterOverrideRef.current ?? computeIterations(view.zoom);
+  const busy = isGenerating || !engine.isReady;
 
   return (
-    <main className="relative w-screen h-screen overflow-hidden bg-black">
+    <main className="relative w-screen h-screen overflow-hidden bg-dark">
       <div
         ref={containerRef}
+        data-fractal-surface
         className="w-full h-full flex items-center justify-center select-none touch-none"
         {...zoomPan.pointerHandlers}
       >
@@ -388,80 +427,104 @@ export function FractalExplorer({ engineName, createWorker, poolSize, urlExtras 
           viewportRef={viewportRef}
           txWrapRef={txWrapRef}
         />
-
-        {(isGenerating || !engine.isReady) && (
-          <div className="fixed bottom-6 right-6 flex items-center bg-black/80 text-white p-3 rounded-lg border border-purple-500 shadow-lg pointer-events-none">
-            <div className="animate-spin h-6 w-6 mr-3 rounded-full border-2 border-t-transparent border-purple-500"></div>
-            <div className="text-xs">
-              <div>{!engine.isReady ? `Loading ${engineName}…` : "Rendering…"}</div>
-              <div>Zoom: {view.zoom.toFixed(2)}x</div>
-              <div>X: {view.panX.toFixed(4)}</div>
-              <div>Y: {view.panY.toFixed(4)}</div>
-            </div>
-          </div>
-        )}
       </div>
 
-      {/* Engine status */}
-      <div className="fixed top-4 left-4 z-50 pointer-events-none">
-        {engine.isReady ? (
-          <div className="flex items-center px-3 py-2 bg-green-900/50 border border-green-500 rounded-lg">
-            <div className="w-2 h-2 bg-green-500 rounded-full mr-2 animate-pulse"></div>
-            <span className="text-green-300 text-sm font-medium">
-              {engineName} ready — {poolSize} worker{poolSize > 1 ? "s" : ""}
-            </span>
-          </div>
-        ) : (
-          <div className="flex items-center px-3 py-2 bg-yellow-900/50 border border-yellow-500 rounded-lg">
-            <div className="w-2 h-2 bg-yellow-500 rounded-full mr-2 animate-pulse"></div>
-            <span className="text-yellow-300 text-sm font-medium">Loading {engineName}…</span>
-          </div>
-        )}
+      {/* Render indicator: a hairline sweeping the top edge. It replaces the
+          floating spinner box, which collided with the readout — this has no
+          footprint at all, and it animates stroke-dashoffset only, so it costs
+          the compositor nothing while putImageData runs on the main thread. */}
+      {busy && (
+        <svg
+          className="fixed top-0 inset-x-0 z-50 h-px w-full pointer-events-none"
+          viewBox="0 0 100 1"
+          preserveAspectRatio="none"
+          aria-hidden="true"
+        >
+          <path className="fx-scan-base" d="M0 .5 H100" vectorEffect="non-scaling-stroke" />
+          <path
+            className="fx-scan-pulse"
+            d="M0 .5 H100"
+            pathLength={100}
+            vectorEffect="non-scaling-stroke"
+          />
+        </svg>
+      )}
+      <span className="sr-only" role="status" aria-live="polite">
+        {busy ? "Rendering" : "Ready"}
+      </span>
+
+      {/* Status — stacked, so the engine badge and the live-preview flag can
+          never cover each other the way they used to. */}
+      <div
+        data-hud="status"
+        className="fixed top-5 left-5 z-40 flex flex-col items-start gap-2 pointer-events-none"
+      >
+        <Panel className="fx-enter-right flex items-center gap-2.5 px-3 py-1.5">
+          <span
+            className={`fx-dot ${
+              !engine.isReady ? "fx-dot--loading" : isGenerating ? "fx-dot--busy" : ""
+            }`}
+            aria-hidden="true"
+          />
+          <span className="font-display text-[0.6rem] uppercase tracking-[0.22em] text-white/85">
+            {engineName}
+          </span>
+          <span className="w-px h-3 bg-white/15" aria-hidden="true" />
+          <span className="fx-num text-[0.62rem] text-grey/60">
+            {poolSize} {poolSize > 1 ? "workers" : "worker"}
+          </span>
+        </Panel>
+        {zoomPan.isDragging && <Badge tone="pink">Live</Badge>}
       </div>
 
-      <ControlsPanel
-        zoom={view.zoom}
-        size={size}
-        setSize={setSize}
-        mousePosition={zoomPan.mousePosition}
-        zoomAtPoint={zoomAtPointUI}
-        showStats={showStats}
-        setShowStats={setShowStats}
-        isJulia={isJulia}
-        setIsJulia={setIsJulia}
-        juliaRe={juliaRe}
-        setJuliaRe={setJuliaRe}
-        juliaIm={juliaIm}
-        setJuliaIm={setJuliaIm}
-        iterations={displayIter}
-      />
+      {/* Below md the four corners stop fitting around a square canvas: the
+          configuration panels step aside and the readout stacks over the rail. */}
+      <div className="hidden hud:block fixed top-5 right-5 z-30 pointer-events-none">
+        <ControlsPanel
+          size={size}
+          setSize={setSize}
+          iterations={displayIter}
+          isJulia={isJulia}
+          setIsJulia={setIsJulia}
+          juliaRe={juliaRe}
+          setJuliaRe={setJuliaRe}
+          juliaIm={juliaIm}
+          setJuliaIm={setJuliaIm}
+          showStats={showStats}
+          setShowStats={setShowStats}
+        />
+      </div>
 
-      <div className="fixed left-1/2 top-6 transform -translate-x-1/2 flex gap-4">
-        <NavigationControls
+      <div className="hidden hud:block fixed bottom-5 left-5 z-30 pointer-events-none">
+        <StatsPanel
+          show={showStats}
+          stats={stats}
+          engineName={engineName}
+          iterations={displayIter}
+          onReset={resetStats}
+        />
+      </div>
+
+      <div className="fixed z-30 pointer-events-none bottom-[7rem] left-1/2 -translate-x-1/2 hud:bottom-5 hud:left-auto hud:right-5 hud:translate-x-0">
+        <ReadoutPanel
+          zoom={view.zoom}
+          size={size}
+          panX={view.panX}
+          panY={view.panY}
+          onZoom={zoomFromUI}
+        />
+      </div>
+
+      <div className="fixed bottom-5 left-1/2 -translate-x-1/2 z-40 pointer-events-none">
+        <HudRail
           canGoBack={canGoBack}
           canGoForward={canGoForward}
           onGoBack={handleGoBack}
           onGoForward={handleGoForward}
+          onDownload={handleDownload}
+          ready={engine.isReady}
         />
-        <DownloadButton onDownload={handleDownload} disabled={!engine.isReady} />
       </div>
-
-      <StatsPanel
-        show={showStats}
-        stats={stats}
-        panX={view.panX}
-        panY={view.panY}
-        zoom={view.zoom}
-        onReset={resetStats}
-      />
-
-      <InfoBar
-        zoom={view.zoom}
-        size={size}
-        panX={view.panX}
-        panY={view.panY}
-        isInteracting={zoomPan.isDragging}
-      />
     </main>
   );
 }

@@ -113,19 +113,34 @@ same view after 3 discarded warm-ups (WASM tier-up and JIT).
 
 | Scene | Go · WASM ×6 | TypeScript | Ratio |
 |---|---|---|---|
-| The whole set, zoom 1, 1000 iterations | **109.4 ms** | 395.7 ms | 3.6× |
-| Off-centre edge, zoom 1, 1000 iterations | **118.5 ms** | 395.7 ms | 3.3× |
-| Julia (−0.4 + 0.6i), zoom 1, 1000 iterations | **16.0 ms** | 118.9 ms | 7.4× |
-| Deep zoom (2045×), 2000 iterations both | **82.7 ms** | 333.0 ms | 4.0× |
-| **One instance each (`?workers=1`)** | **327.1 ms** | 395.7 ms | 1.2× |
+| The whole set, zoom 1, 1000 iterations | **123.6 ms** | 476.7 ms | 3.9× |
+| Off-centre edge, zoom 1, 1000 iterations | **134.8 ms** | 475.7 ms | 3.5× |
+| Julia (−0.4 + 0.6i), zoom 1, 1000 iterations | **15.4 ms** | 132.3 ms | 8.6× |
+| Deep zoom (2045×), 2000 iterations both | **86.3 ms** | 404.6 ms | 4.7× |
+| **One instance each (`?workers=1`)** | **396.9 ms** | 476.7 ms | 1.2× |
 
 The last row is the one v1 lost. With the PNG/base64 boundary gone, a single
 WASM instance beats a single TS worker on the same 1000×1000 frame — the win
 no longer depends on parallelism.
 
-Remaining caveats: a residual memcpy on the Go side (~1 ms for 4 MB) where
+### How much to trust these
+
+Absolute timings drift with machine state far more than you would like. An
+earlier session the same day, same build, gave **109.4 ms** on the reference
+scene instead of 123.6 — 13% apart with no code change. That was checked
+rather than assumed: the previous commit was rebuilt and re-measured back to
+back and produced 123.1 ms, i.e. the machine had slowed, not the code.
+
+So read the **ratio** column, not the milliseconds. Across both sessions the
+whole-set ratio moved 3.6× → 3.9×, and every scene kept its ordering.
+
+Other caveats: a residual memcpy on the Go side (~1 ms for 4 MB) where
 TypeScript transfers with zero copy; warm-ups of a different nature (WASM
 tier-up vs V8 JIT); one machine.
+
+Reproduce it with `node tools/capture.mjs` (screenshots) or the same protocol
+by hand: `pnpm build && pnpm preview`, then re-render the identical view with a
+`deltaY: 0` wheel event, discard 3, average 10.
 
 ## Progressive rendering
 
@@ -184,10 +199,26 @@ worker computes horizontal bands of the frame, sorted centre-out. `?workers=N`
   image is stretched on Retina displays. Rendering at DPR would double the
   workload — and would have to be measured again.
 
+## The interface
+
+The HUD borrows its language from the portfolio the project is showcased in:
+square panels, corner brackets, Orbitron micro-labels, tabular figures, cyan
+for the accent. Two things it does that a plain fractal viewer usually skips:
+
+- **A scale bar**, not just a magnification factor. It picks a round 1/2/5×10ⁿ
+  length of the complex plane and draws it — the bar breathes as you zoom and
+  snaps to the next round number. `×2.0k` tells you how far you came;
+  `2×10⁻⁴` tells you what you are looking at.
+- **Coordinates at the precision the zoom actually resolves.** One screen pixel
+  is `4/(size·zoom)` units, so the readout carries `⌈log₁₀(size·zoom/4)⌉ + 1`
+  decimals — 4 at zoom 1, 7 at zoom 2 000, 16 at zoom 10¹². A fixed four
+  decimals stopped distinguishing adjacent pixels at zoom 40, and the URL
+  stopped reproducing a shared view at zoom 4 000; both now follow the zoom.
+
 ## Stack
 
 Go 1.24 (stdlib only, `syscall/js`) · TypeScript · React 18 · Vite 5 ·
-Tailwind CSS v4 · Web Workers.
+Tailwind CSS v4 · Web Workers. No animation library — the UI motion is CSS.
 
 The project started life from the [wasm-react](https://github.com/akshays-repo/wasm-react)
 template, which supplied the initial Go + React + `wasm_exec.js` wiring.

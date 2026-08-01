@@ -23,7 +23,7 @@ export const FractalCanvas = forwardRef<HTMLCanvasElement, FractalCanvasProps>(
             ref={ref}
             width={size}
             height={size}
-            className="block bg-black select-none touch-none"
+            className="block bg-dark select-none touch-none"
             style={{
               width: size,
               height: size,

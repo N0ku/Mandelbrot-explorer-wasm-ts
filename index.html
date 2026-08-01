@@ -2,12 +2,20 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <link rel="icon" type="image/svg+xml" href="/vite.svg" />
+    <!-- maximum-scale/user-scalable stay: the whole app IS a zoom surface, and
+         usePreventBrowserZoom depends on the browser not hijacking pinch. -->
     <meta
       name="viewport"
       content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"
     />
-    <title>Vite + React + TS</title>
+    <meta name="color-scheme" content="dark" />
+    <meta name="theme-color" content="#030303" />
+    <meta
+      name="description"
+      content="Mandelbrot and Julia explorer — the same escape-time kernel compiled to Go/WebAssembly and written in TypeScript, measured side by side."
+    />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <title>Mandelbrot — Go · WASM vs TypeScript</title>
   </head>
   <body>
     <div id="root"></div>

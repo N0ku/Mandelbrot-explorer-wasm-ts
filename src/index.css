@@ -1,27 +1,309 @@
 @import "tailwindcss";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
+/* ── Orbitron — copied verbatim from the portfolio's tokens.css ───────────── */
+@font-face {
+  font-family: "Orbitron";
+  src: url("/assets/fonts/OrbitronLight-lqBq.otf") format("opentype");
+  font-weight: 300;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Orbitron";
+  src: url("/assets/fonts/OrbitronMedium-naY4.otf") format("opentype");
+  font-weight: 500;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Orbitron";
+  src: url("/assets/fonts/OrbitronBold-93z0.otf") format("opentype");
+  font-weight: 700;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Orbitron";
+  src: url("/assets/fonts/OrbitronBlack-y4XZ.otf") format("opentype");
+  font-weight: 900;
+  font-display: swap;
 }
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
+/* ── Design tokens — the same block as the portfolio, so bg-white/2,
+      text-grey/70 and border-white/10 resolve identically here. Manrope is
+      declared but deliberately not loaded: the portfolio doesn't load it
+      either, and the explorer must not look different from the site that
+      showcases it. ─────────────────────────────────────────────────────── */
+@theme {
+  --color-green: #16c867;
+  --color-grey: #cccccc;
+  --color-pink: #f116fd;
+  --color-cyan: #00eaff;
+  --color-white: #fafafa;
+  --color-dark: #030303;
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+  --font-sans: "Manrope", sans-serif;
+  --font-display: "Orbitron", sans-serif;
+  --font-mono: ui-monospace, "SF Mono", "Cascadia Code", Menlo, Consolas, monospace;
+
+  --tracking-default: 0.08em;
+  --tracking-tight: 0.02em;
+
+  /* Below this the default 1000px canvas stops fitting between the side
+     panels, so the configuration panels step aside rather than sit on the
+     image. Nothing magic about the number: 1000 + two 272px panels + margins. */
+  --breakpoint-hud: 1100px;
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background: var(--color-dark);
+  color: var(--color-white);
+  font-family: var(--font-sans);
+  letter-spacing: var(--tracking-default);
+  /* Load-bearing: usePreventBrowserZoom and the pinch gesture depend on it. */
   touch-action: none;
+}
+
+/* Sitewide focus convention, zero specificity so components can override. */
+:where(button, a, input, select, [tabindex]):focus-visible {
+  outline: 2px solid var(--color-cyan);
+  outline-offset: 2px;
+}
+
+:root {
+  accent-color: var(--color-cyan);
+}
+
+/* ── Numerals ─────────────────────────────────────────────────────────────
+   The global 0.08em tracking is the art direction's biggest lever, but it is
+   wrong for figures that update ten times a second: tabular-nums plus the
+   tight tracking keeps digit columns from shuddering. */
+.fx-num {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: var(--tracking-tight);
+}
+
+.fx-microlabel {
+  font-family: var(--font-display);
+  font-size: 0.58rem;
+  letter-spacing: 0.25em;
+  text-transform: uppercase;
+  color: rgb(from var(--color-grey) r g b / 0.55);
+}
+
+.fx-meta {
+  font-family: var(--font-mono);
+  font-size: 0.6rem;
+  letter-spacing: 0.04em;
+  /* 0.55 rather than the portfolio's 0.45: these panels sit on a saturated
+     fractal, not on #030303. */
+  color: rgb(from var(--color-grey) r g b / 0.55);
+}
+
+/* ── Metric rows — the portfolio's .mbw-row idiom. Three columns need the
+      900px of a content section; in a 272px HUD panel the value and its
+      qualifier stack on the right instead, which never wraps awkwardly. ──── */
+.fx-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.45rem 0;
+  border-top: 1px solid rgb(from var(--color-white) r g b / 0.07);
+}
+.fx-row:first-of-type {
+  border-top: 0;
+}
+.fx-row__label {
+  font-family: var(--font-display);
+  font-size: 0.55rem;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: rgb(from var(--color-grey) r g b / 0.55);
+  white-space: nowrap;
+}
+.fx-row__right {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 0.1rem;
+  min-width: 0;
+}
+.fx-row__value {
+  text-align: right;
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: var(--tracking-tight);
+  color: rgb(from var(--color-grey) r g b / 0.85);
+}
+.fx-row__value--accent {
+  color: var(--color-cyan);
+}
+.fx-row__meta {
+  text-align: right;
+  font-family: var(--font-mono);
+  font-size: 0.6rem;
+  letter-spacing: 0.04em;
+  color: rgb(from var(--color-grey) r g b / 0.55);
+}
+
+/* ── Scale bar ────────────────────────────────────────────────────────────
+   Deliberately not animated: when the nice-number bucket flips, the width
+   jumps discontinuously, and a measuring instrument that lerps through
+   physically meaningless widths is a broken instrument. */
+.fx-scalebar {
+  position: relative;
+  height: 10px;
+  color: rgb(from var(--color-white) r g b / 0.8);
+}
+.fx-scalebar__rule {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 1px;
+  background: currentColor;
+}
+.fx-scalebar__tick {
+  position: absolute;
+  bottom: 0;
+  width: 1px;
+  background: currentColor;
+}
+.fx-scalebar__tick--end {
+  height: 10px;
+}
+.fx-scalebar__tick--end[data-side="start"] {
+  left: 0;
+}
+.fx-scalebar__tick--end[data-side="end"] {
+  right: 0;
+}
+.fx-scalebar__tick--mid {
+  height: 5px;
+  left: 50%;
+}
+
+/* ── Render indicator — the portfolio's scan-pulse, at 1.2s instead of 4.5s
+      (a full-res pass takes 100–700 ms; slower would not read as activity) ── */
+.fx-scan-base {
+  stroke: rgb(from var(--color-white) r g b / 0.12);
+  stroke-width: 1;
+}
+.fx-scan-pulse {
+  stroke: var(--color-cyan);
+  stroke-width: 1;
+  stroke-dasharray: 12 88;
+  stroke-dashoffset: 100;
+  animation: fx-sweep 1.2s linear infinite;
+}
+@keyframes fx-sweep {
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+/* ── Status dot — a square; radius is reserved for round glass buttons ───── */
+.fx-dot {
+  width: 5px;
+  height: 5px;
+  background: var(--color-green);
+}
+.fx-dot--busy {
+  background: var(--color-cyan);
+  animation: fx-blink 1.2s ease-in-out infinite;
+}
+.fx-dot--loading {
+  background: var(--color-pink);
+  animation: fx-blink 1.2s ease-in-out infinite;
+}
+@keyframes fx-blink {
+  50% {
+    opacity: 0.25;
+  }
+}
+
+/* ── Panel entrances — replaces framer-motion's two mount fades ──────────── */
+@keyframes fx-rise {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@keyframes fx-slide {
+  from {
+    opacity: 0;
+    transform: translateX(10px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+.fx-enter-up {
+  animation: fx-rise 0.3s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+.fx-enter-right {
+  animation: fx-slide 0.3s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+/* ── Form controls ────────────────────────────────────────────────────────── */
+.fx-input {
+  width: 100%;
+  appearance: textfield;
+  background: transparent;
+  border: 0;
+  border-bottom: 1px solid rgb(from var(--color-white) r g b / 0.15);
+  border-radius: 0;
+  padding: 0.3rem 0;
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: var(--tracking-tight);
+  color: var(--color-white);
+  transition: border-color 0.3s ease;
+}
+.fx-input::-webkit-inner-spin-button,
+.fx-input::-webkit-outer-spin-button {
+  appearance: none;
+  margin: 0;
+}
+.fx-input:hover {
+  border-bottom-color: rgb(from var(--color-white) r g b / 0.35);
+}
+.fx-input:focus {
+  border-bottom-color: var(--color-cyan);
+}
+
+/* Keep panels reachable on a short viewport without breaking touch-action. */
+.fx-scrollable {
+  max-height: calc(100dvh - 6rem);
+  overflow-y: auto;
+  touch-action: pan-y;
+  scrollbar-width: thin;
+}
+
+/* ── Reduced motion — keep the end state, kill the transition. The scan line
+      is a STATUS indicator, so it must stay visible as a static hairline. ── */
+@media (prefers-reduced-motion: reduce) {
+  .fx-enter-up,
+  .fx-enter-right {
+    animation: none;
+    opacity: 1;
+    transform: none;
+  }
+  .fx-scan-pulse {
+    animation: none;
+    stroke-dasharray: none;
+    stroke-dashoffset: 0;
+    opacity: 0.5;
+  }
+  .fx-dot--busy,
+  .fx-dot--loading {
+    animation: none;
+    opacity: 1;
+  }
 }
