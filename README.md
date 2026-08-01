@@ -23,10 +23,13 @@ timed.
 |---|---|
 | `/` | Go compiled to WebAssembly, up to 6 Web Workers, one full WASM instance each |
 | `/js` | Pure TypeScript, one Web Worker |
+| `/gl` | A WebGL2 fragment shader on the GPU, one OffscreenCanvas |
+| `/simd` | Rust compiled to wasm with `+simd128`, up to 6 workers (`?simd=0` for the scalar control) |
 
-Copy the query string from one route to the other and you are comparing the
-same frame, pixel for pixel — both routes share the same adaptive iteration
-formula, `min(2000, max(100, floor(1000 × zoom^0.3)))`.
+Copy the query string from one route to another and you are comparing the
+same frame, pixel for pixel — every route shares the same adaptive iteration
+formula, `min(2000, max(100, floor(1000 × zoom^0.3)))`. The engine switch in
+the HUD does exactly that, carrying the current view across.
 
 ## Run it
 
@@ -178,8 +181,73 @@ worker computes horizontal bands of the frame, sorted centre-out. `?workers=N`
 | `size` | Frame side in pixels (100..2000) |
 | `julia`, `juliaRe`, `juliaIm` | Julia mode and its constant |
 | `iter` | Explicit iteration override (benchmarks); cleared on the next zoom |
-| `workers` | WASM pool size 1..6 (route `/` only) |
+| `workers` | Worker-pool size 1..6 (routes `/` and `/simd`) |
+| `simd` | `0` loads the scalar Rust binary instead of the vectorised one (route `/simd`) |
 | `mode` | v1 strategy selector — accepted and ignored, kept for old URLs |
+
+## v4: answering the SIMD question
+
+This project began in Kotlin, on the JVM, with a hand-written thread pool.
+The advice for going faster there was to add SIMD on top of the threads — and
+that question went unanswered for two rewrites, because **neither engine above
+can reach SIMD at all**: the Go compiler does not auto-vectorise and exposes
+no intrinsics for the wasm target, and JavaScript has had no SIMD primitive
+since `SIMD.js` was abandoned. Answering it needed new engines.
+
+**`/gl` — the GPU.** The kernel becomes a fragment shader in an
+`OffscreenCanvas`: one invocation per pixel, thousands in lockstep. That is
+SIMT, SIMD's hardware cousin. It is by far the fastest engine here.
+
+**`/simd` — vectorised Rust, and its control.** `rust/src/lib.rs` compiles to
+two binaries, with and without `+simd128`. A `v128` register holds two f64
+lanes, so the ceiling is ×2, not ×4. The hard part is divergence: neighbouring
+pixels escape at different iterations and a vector cannot branch per lane, so
+the loop runs while *any* lane is inside (`v128_any_true`) and every update is
+masked with `v128_bitselect`.
+
+Measured 2026-08-01 in one session, production build, headless Chromium 131 on
+the Metal backend, 1000×1000, 3 warm-ups discarded, average of 10 runs:
+
+| Engine | The set, zoom 1 | Deep ×2,045 |
+|---|---|---|
+| WebGL2 | **13.9 ms** | **13.9 ms** |
+| Rust · SIMD ×6 | 79.5 ms | 58.5 ms |
+| Go · WASM ×6 | 123.8 ms | 84.4 ms |
+| Rust · scalar ×6 *(control)* | 126.1 ms | 78.0 ms |
+| TypeScript | 474.7 ms | 391.4 ms |
+
+**The control is the point.** Rust without vectorisation lands within 2% of
+Go, so changing language buys nothing — the whole ×1.59 gain belongs to the
+vector instructions. Without that row, the win could just as easily have been
+credited to Rust.
+
+**And SIMD is not free.** On the Julia scene the vectorised kernel is 5%
+*slower* than its scalar control: pixels there escape early and unevenly, a
+pair always costs what its slowest lane costs, and the masking stops paying
+for itself.
+
+### What the GPU pays in exchange
+
+GLSL ES 3.0 has no `double`. `highp float` is 32-bit, so the precision wall
+arrives eight orders of magnitude earlier than on the CPU engines.
+`tools/fidelity.mjs` replays the same view on every engine and compares pixel
+by pixel, at a point that stays on the chaotic boundary at every depth (pick a
+smooth region and you measure the location instead of the arithmetic):
+
+| Depth | WebGL2 · float32 | Rust · float64 |
+|---|---|---|
+| zoom 1 | 0.1% | 0% |
+| ×10² | 4.3% | 0% |
+| ×10⁴ | 19.7% | 0% |
+| ×10⁶ | 49.0% | 0% |
+| ×10⁸ | 99.3% | 0% |
+
+(share of pixels differing from the Go reference by more than 8 on a channel)
+
+Rust is **bit-identical** to Go at every depth — which is the best available
+proof that the lane masking is correct, since one lane leaking past its escape
+would show up immediately. At ×10⁸ the GPU image is three flat bands of
+colour.
 
 ## Known limits & next steps
 
@@ -189,12 +257,19 @@ worker computes horizontal bands of the frame, sorted centre-out. `?workers=N`
 - **No smooth colouring.** The palette indexes the integer iteration count, so
   banding is visible. `n + 1 − log₂(log|z|)` is three lines on each side, but
   the kernel would have to return `|z|²` as well.
-- **1.9 MB × 6.** Every worker still loads its own copy of the Go runtime
-  (down from 2.9 MB after `-ldflags="-s -w"` and deleting the PNG encoder).
-  TinyGo would bring it down to tens of kilobytes.
-- **`SharedArrayBuffer`.** With COOP/COEP headers a single shared memory would
-  replace the six instances, and bands could be written straight into the
-  final buffer.
+- **1.9 MB × 6 — largely answered.** Every Go worker still loads its own copy
+  of the runtime. The Rust binaries put a number on what that costs: under
+  20 KB each, 97× smaller, because no runtime travels with them.
+- **`SharedArrayBuffer` — unblocked, not yet used.** The deployment now ships
+  COOP/COEP (`public/_headers`, mirrored into the dev server), so
+  `crossOriginIsolated` is true and real wasm threads are finally possible.
+  Nothing uses them yet.
+- **The float32 wall.** Particular to the GPU: with no `double` in GLSL,
+  usable depth stops around ×10⁴. Emulated double-float arithmetic would push
+  it back, at the cost of a much heavier kernel.
+- **A synchronous readback.** `readPixels` blocks the GPU pipeline until the
+  bytes are back in CPU memory — this engine's boundary. An async PBO readback
+  (`fenceSync` + `getBufferSubData`) would hide it.
 - **DevicePixelRatio.** The canvas backing store is the logical size, so the
   image is stretched on Retina displays. Rendering at DPR would double the
   workload — and would have to be measured again.
@@ -217,7 +292,8 @@ for the accent. Two things it does that a plain fractal viewer usually skips:
 
 ## Stack
 
-Go 1.24 (stdlib only, `syscall/js`) · TypeScript · React 18 · Vite 5 ·
+Go 1.24 (stdlib only, `syscall/js`) · Rust 1.97 (no wasm-bindgen) · GLSL ES 3.0 ·
+TypeScript · React 18 · Vite 5 ·
 Tailwind CSS v4 · Web Workers. No animation library — the UI motion is CSS.
 
 The project started life from the [wasm-react](https://github.com/akshays-repo/wasm-react)
