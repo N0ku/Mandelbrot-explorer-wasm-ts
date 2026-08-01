@@ -20,9 +20,10 @@ the query string, so the exact same frame can be replayed on both engines and
 timed.
 
 | Route | Engine |
-|---|---|
-| `/` | **Rust** compiled to wasm with `+simd128`, up to 6 workers (`?simd=0` for the scalar control). Also reachable as `/simd`. |
+| --- | --- |
+| `/` | **Go** compiled to WebAssembly, up to 6 Web Workers, one full WASM instance each |
 | `/go` | Go compiled to WebAssembly, up to 6 Web Workers, one full WASM instance each |
+| `/wasm` | Go compiled to WebAssembly, up to 6 Web Workers, one full WASM instance each |
 | `/js` | Pure TypeScript, one Web Worker |
 | `/gl` | A WebGL2 fragment shader on the GPU, one OffscreenCanvas |
 
@@ -81,10 +82,10 @@ iterations := 0
 x2, y2 := x*x, y*y
 
 for x2+y2 < 4 && iterations < maxIter {
-	y = 2*x*y + cIm
-	x = x2 - y2 + cRe
-	x2, y2 = x*x, y*y
-	iterations++
+ y = 2*x*y + cIm
+ x = x2 - y2 + cRe
+ x2, y2 = x*x, y*y
+ iterations++
 }
 ```
 
@@ -115,7 +116,7 @@ preview pass is excluded. Each value is the average of 10 generations of the
 same view after 3 discarded warm-ups (WASM tier-up and JIT).
 
 | Scene | Go · WASM ×6 | TypeScript | Ratio |
-|---|---|---|---|
+| --- | --- | --- | --- |
 | The whole set, zoom 1, 1000 iterations | **123.6 ms** | 476.7 ms | 3.9× |
 | Off-centre edge, zoom 1, 1000 iterations | **134.8 ms** | 475.7 ms | 3.5× |
 | Julia (−0.4 + 0.6i), zoom 1, 1000 iterations | **15.4 ms** | 132.3 ms | 8.6× |
@@ -176,7 +177,7 @@ worker computes horizontal bands of the frame, sorted centre-out. `?workers=N`
 ## URL parameters
 
 | Param | Meaning |
-|---|---|
+| --- | --- |
 | `x`, `y`, `zoom` | The view (centre in the complex plane, magnification) |
 | `size` | Frame side in pixels (100..2000) |
 | `julia`, `juliaRe`, `juliaIm` | Julia mode and its constant |
@@ -209,7 +210,7 @@ Measured 2026-08-01 in one session, production build, headless Chromium 131 on
 the Metal backend, 1000×1000, 3 warm-ups discarded, average of 10 runs:
 
 | Engine | The set, zoom 1 | Deep ×2,045 |
-|---|---|---|
+| --- | --- | --- |
 | WebGL2 | **13.9 ms** | **13.9 ms** |
 | Rust · SIMD ×6 | 79.5 ms | 58.5 ms |
 | Go · WASM ×6 | 123.8 ms | 84.4 ms |
@@ -235,7 +236,7 @@ by pixel, at a point that stays on the chaotic boundary at every depth (pick a
 smooth region and you measure the location instead of the arithmetic):
 
 | Depth | WebGL2 · float32 | Rust · float64 |
-|---|---|---|
+| --- | --- | --- |
 | zoom 1 | 0.1% | 0% |
 | ×10² | 4.3% | 0% |
 | ×10⁴ | 19.7% | 0% |

@@ -44,7 +44,7 @@ export function ReadoutPanel({
   return (
     <Panel
       data-hud="readout"
-      className="fx-enter-up pointer-events-auto w-[15rem] lg:w-[17rem] px-4 py-3"
+      className="fx-enter-up pointer-events-auto w-60 lg:w-68 px-4 py-3"
     >
       <PanelHeader label="Scale" />
 

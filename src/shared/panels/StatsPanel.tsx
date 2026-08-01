@@ -38,7 +38,7 @@ export function StatsPanel({
     <Panel
       data-hud="stats"
       scrollable
-      className="fx-enter-up pointer-events-auto w-[15rem] lg:w-[17rem] px-4 py-3"
+      className="fx-enter-up pointer-events-auto w-60 lg:w-68 px-4 py-3"
     >
       <PanelHeader label="Statistics">
         {/* The capture driver selects on this exact title — do not localise it. */}

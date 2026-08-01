@@ -39,7 +39,7 @@ export function ControlsPanel({
     <Panel
       data-hud="controls"
       scrollable
-      className="fx-enter-right pointer-events-auto w-[15rem] lg:w-[17rem] px-4 py-3"
+      className="fx-enter-right pointer-events-auto w-60 lg:w-68 px-4 py-3"
     >
       <PanelHeader label="Controls">
         <GhostButton
@@ -49,7 +49,7 @@ export function ControlsPanel({
         >
           Stats
           <span
-            className={`block w-[5px] h-[5px] ${showStats ? "bg-cyan" : "bg-white/25"}`}
+            className={`block w-1.25 h-1.25 ${showStats ? "bg-cyan" : "bg-white/25"}`}
             aria-hidden="true"
           />
         </GhostButton>
