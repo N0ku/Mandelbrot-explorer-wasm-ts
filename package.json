@@ -1,17 +1,14 @@
 {
-  "name": "mandelbrot-explorer-wasm-ts",
+  "name": "wasm-react",
   "private": true,
-  "version": "1.0.0",
-  "description": "A Mandelbrot/Julia explorer comparing the same escape-time kernel in Go/WebAssembly and in TypeScript",
-  "license": "MIT",
+  "version": "0.0.0",
   "type": "module",
-  "packageManager": "pnpm@9.15.3+sha512.1f79bc245a66eb0b07c5d4d83131240774642caaa86ef7d0434ab47c0d16f66b04e21e0c086eb61e62c77efc4d7f7ec071afad3796af64892fae66509173893a",
   "scripts": {
     "dev": "vite",
-    "build": "tsc && vite build",
+    "build": "pnpm build:wasm && tsc && vite build",
     "lint": "eslint . --ext ts,tsx --report-unused-disable-directives --max-warnings 0",
     "preview": "vite preview",
-    "build:wasm": "cd go && GOOS=js GOARCH=wasm go build -o ../public/main.wasm"
+    "build:wasm": "cd go && GOOS=js GOARCH=wasm go build -ldflags=\"-s -w\" -o ../public/main.wasm"
   },
   "dependencies": {
     "@tailwindcss/vite": "^4.1.7",
@@ -32,5 +29,6 @@
     "eslint-plugin-react-refresh": "^0.4.5",
     "typescript": "^5.2.2",
     "vite": "^5.0.8"
-  }
+  },
+  "packageManager": "pnpm@9.15.3+sha512.1f79bc245a66eb0b07c5d4d83131240774642caaa86ef7d0434ab47c0d16f66b04e21e0c086eb61e62c77efc4d7f7ec071afad3796af64892fae66509173893a"
 }

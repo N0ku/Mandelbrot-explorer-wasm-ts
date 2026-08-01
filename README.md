@@ -10,16 +10,18 @@ WebAssembly compiled from Go actually faster than plain TypeScript?**
 
 The same escape-time kernel is written twice: once in Go, once as a
 line-for-line TypeScript transcription, and each engine lives on its own route.
-The whole view (position, zoom, strategy, Julia constant) is encoded in the
-query string, so the exact same frame can be replayed on both engines and timed.
+The whole view (position, zoom, iteration depth, Julia constant) is encoded in
+the query string, so the exact same frame can be replayed on both engines and
+timed.
 
 | Route | Engine |
 |---|---|
-| `/` | Go compiled to WebAssembly, 6 Web Workers, one full WASM instance each |
+| `/` | Go compiled to WebAssembly, up to 6 Web Workers, one full WASM instance each |
 | `/js` | Pure TypeScript, one Web Worker |
 
-Copy the query string from one route to the other and you are comparing the same
-frame, pixel for pixel.
+Copy the query string from one route to the other and you are comparing the
+same frame, pixel for pixel — both routes share the same adaptive iteration
+formula, `min(2000, max(100, floor(1000 × zoom^0.3)))`.
 
 ## Run it
 
@@ -29,24 +31,48 @@ pnpm dev            # http://localhost:5173
 ```
 
 `public/main.wasm` is committed, so **you do not need Go installed** to run the
-explorer. To rebuild it:
+explorer. `pnpm build` rebuilds it as part of the production build; to rebuild
+just the binary:
 
 ```bash
-pnpm build:wasm     # cd go && GOOS=js GOARCH=wasm go build -o ../public/main.wasm
+pnpm build:wasm     # GOOS=js GOARCH=wasm go build -ldflags="-s -w"
 ```
 
+Mouse: drag to pan, scroll (or trackpad pinch) to zoom at the cursor.
 Keyboard: `+`/`-` zoom · arrows pan · `s` stats panel · `b`/`n` history ·
 `j` Julia · `r` reset.
 
+## v2: the boundary is flat now
+
+The first version of this project measured something surprising: the Go engine
+was losing to TypeScript whenever parallelism wasn't hiding its boundary. Each
+frame left Go as a PNG re-encoded to base64 inside a JS string — encoded
+twice, decoded ten times per frame. Below the worker-pool threshold, the same
+kernel lost 107.6 ms to 81.6 ms.
+
+v2 deletes that boundary instead of hiding it:
+
+- **Sub-rectangle rendering.** One binding, `wasmRenderTile`, renders any
+  `[x0,x0+w)×[y0,y0+h)` of the frame straight into a `Uint8ClampedArray`
+  supplied by the worker (`go/wasm/render.go`, `go/fractal/kernel.go`). The v1
+  trick of re-projecting each tile as a zoomed, re-centred full frame is gone.
+- **Raw RGBA, one memcpy.** `js.CopyBytesToJS` is the only copy in the
+  pipeline. The worker transfers the buffer to the main thread (zero copy),
+  which paints it with `putImageData` on a mounted canvas. No PNG, no base64,
+  no compositing.
+- **The same host pipeline for both engines.** Both routes run the identical
+  explorer component; the only difference is the worker factory (6 WASM
+  workers vs 1 TS worker). The TypeScript kernel is untouched from v1.
+
 ## The kernel, twice
 
-Go — `go/fractal/generator.go`:
+Go — `go/fractal/kernel.go`:
 
 ```go
 iterations := 0
 x2, y2 := x*x, y*y
 
-for x2+y2 < 4 && iterations < fg.Params.MaxIterations {
+for x2+y2 < 4 && iterations < maxIter {
 	y = 2*x*y + cIm
 	x = x2 - y2 + cRe
 	x2, y2 = x*x, y*y
@@ -68,107 +94,94 @@ while (x2 + y2 < 4 && iterations < params.maxIter) {
 }
 ```
 
-Three multiplications per iteration on both sides (`x2`/`y2` are reused), the
-same IEEE-754 doubles, the same escape radius. The comparison isolates the
-runtime, not the algorithm. The same function serves Mandelbrot *and* Julia —
-only the initialisation of `(c, z)` is flipped.
+Three multiplications per iteration on both sides, the same IEEE-754 doubles,
+the same escape radius. The same function serves Mandelbrot *and* Julia — only
+the initialisation of `(c, z)` is flipped.
 
 ## What the numbers say
 
-Measured 2026-07-30, Chromium 131 headless, 12 logical cores. 1000×1000 frames,
-strategy `auto`, 6 WASM workers. Each value is the average of 10 consecutive
-generations at identical parameters, after 3 warm-up runs. The clock is the
-app's own (`useStats`, `performance.now`): from trigger to final canvas,
-identical on both paths.
+Measured 2026-08-01, production build, Chromium 131 headless, 12 logical
+cores. 1000×1000 frames, shared iteration formula (every row comparable).
+Timed window: full-resolution dispatch to the last `putImageData` — the
+preview pass is excluded. Each value is the average of 10 generations of the
+same view after 3 discarded warm-ups (WASM tier-up and JIT).
 
-| Scene | Go · WASM ×6 | TypeScript |
-|---|---|---|
-| The whole set, zoom 1, 1000 iterations | **277.6 ms** | 424.2 ms |
-| Off-centre edge, zoom 1, 1000 iterations | **249.8 ms** | 424.2 ms |
-| Julia (−0.4 + 0.6i), zoom 1, 1000 iterations | **83.3 ms** | 146.4 ms |
-| Deep zoom (2044×) — *not comparable, see below* | 164.7 ms | 374.2 ms |
-| **400×400 — below the pool threshold, one instance each** | 107.6 ms | **81.6 ms** |
+| Scene | Go · WASM ×6 | TypeScript | Ratio |
+|---|---|---|---|
+| The whole set, zoom 1, 1000 iterations | **109.4 ms** | 395.7 ms | 3.6× |
+| Off-centre edge, zoom 1, 1000 iterations | **118.5 ms** | 395.7 ms | 3.3× |
+| Julia (−0.4 + 0.6i), zoom 1, 1000 iterations | **16.0 ms** | 118.9 ms | 7.4× |
+| Deep zoom (2045×), 2000 iterations both | **82.7 ms** | 333.0 ms | 4.0× |
+| **One instance each (`?workers=1`)** | **327.1 ms** | 395.7 ms | 1.2× |
 
-The last row is the interesting one. At 400×400 the app falls back to a single
-WASM instance (the pool only kicks in at ≥ 500 px), and the same Go kernel
-**loses** to TypeScript. Nothing changed in the arithmetic — what changed is
-that parallelism is no longer hiding the boundary.
+The last row is the one v1 lost. With the PNG/base64 boundary gone, a single
+WASM instance beats a single TS worker on the same 1000×1000 frame — the win
+no longer depends on parallelism.
 
-### The boundary is the real cost
+Remaining caveats: a residual memcpy on the Go side (~1 ms for 4 MB) where
+TypeScript transfers with zero copy; warm-ups of a different nature (WASM
+tier-up vs V8 JIT); one machine.
 
-Go hands each frame back as a PNG re-encoded to base64, inside a JS string:
+## Progressive rendering
 
-```go
-img := generator.GenerateFractal(fractalType)
-base64Image := utils.ImageToBase64(img)          // png.Encode + base64
-return js.ValueOf("data:image/png;base64," + base64Image)
-```
+The explorer is built for motion:
 
-TypeScript hands back the raw buffer, transferred with zero copy:
+1. **During a gesture** the last frame is CSS-transformed (translate + scale),
+   so pan and zoom have immediate feedback at zero compute cost.
+2. **On settle**, the on-screen pixels are re-projected to the new view, then
+   a quarter-resolution preview lands within tens of milliseconds.
+3. **Full-resolution bands** stream over it, centre-out, painted the moment
+   they arrive — no `Promise.all` barrier anywhere.
 
-```ts
-self.postMessage({ result }, { transfer: [result.buffer] })
-// …straight into ctx.putImageData(imageData, 0, 0)
-```
-
-For one 400×400 frame: **31 084 base64 characters** crossing as a string on the
-Go side, against **640 000 bytes transferred at zero cost** on the TypeScript
-side. The Go engine can win the computation and still lose the frame.
-
-### Honest caveat
-
-The two engines do not choose their iteration depth the same way. The WASM path
-is frozen at 1000 iterations (`src/WasmApp.tsx`); the TypeScript path is
-adaptive, `min(2000, max(100, floor(1000 × zoom^0.3)))`
-(`src/js/hooks/useFractalImage.ts`). **They only coincide at zoom = 1** — which
-is the zoom of every comparable row above. The deep-zoom row is published as-is
-and marked not comparable: TypeScript does twice the iterations there.
-
-Also note the UI's "Iterations Parameter" field displays the value *before*
-clamping, so it can read 9845 where the engine actually runs 2000.
+A generation token makes the last request always win: a new gesture purges the
+queue and stale tiles are dropped on arrival, so ghost tiles are impossible.
+History and the URL are written once per gesture, not once per mousemove.
 
 ## Parallelism: the trap and the answer
 
-Under `GOOS=js GOARCH=wasm` **the Go runtime is single-threaded**. The `row`
-strategy spawns one goroutine per row - 1000 goroutines for a 1000 px frame
-and buys exactly nothing in throughput.
+Under `GOOS=js GOARCH=wasm` **the Go runtime is single-threaded**. v1 spawned
+one goroutine per row - 1000 goroutines for a 1000 px frame - and bought
+exactly nothing in throughput; its `grid` strategy even wrapped whole tiles in
+a mutex.
 
-The answer had to be architectural: **six complete WASM instances, one per Web
-Worker**, each with its own linear memory. There is no `SharedArrayBuffer` here
-(the dev server sets no COOP/COEP headers), so the instances are fully isolated.
-Since the Go binding only knows how to render a full square, a *tile* is
-requested by re-projecting it as a zoomed, re-centred full frame
-(`src/workers/dedicatedWasmWorker.ts`), then composited onto a canvas.
+The answer is architectural: **up to six complete WASM instances, one per Web
+Worker**, each with its own linear memory (there is no `SharedArrayBuffer`
+here — no COOP/COEP headers). Since v2 renders sub-rectangles natively, each
+worker computes horizontal bands of the frame, sorted centre-out. `?workers=N`
+(1..6) pins the pool size for benchmarking.
 
-## Generation strategies
+## URL parameters
 
-The UI exposes five, so you can watch the cost model change: `pixel` (sequential),
-`row`, `column`, `grid` (tiled, centre-outwards), and `auto`. On the TypeScript
-side `row`/`column`/`grid` are cooperative rather than parallel — the only real
-concurrency there is the worker itself.
+| Param | Meaning |
+|---|---|
+| `x`, `y`, `zoom` | The view (centre in the complex plane, magnification) |
+| `size` | Frame side in pixels (100..2000) |
+| `julia`, `juliaRe`, `juliaIm` | Julia mode and its constant |
+| `iter` | Explicit iteration override (benchmarks); cleared on the next zoom |
+| `workers` | WASM pool size 1..6 (route `/` only) |
+| `mode` | v1 strategy selector — accepted and ignored, kept for old URLs |
 
 ## Known limits & next steps
 
-- **The float64 wall.** Around zoom 1e12–1e13 doubles run out of mantissa and the
-  image breaks into flat blocks. There is no guard. Next step: perturbation
-  theory with a reference orbit, or arbitrary-precision arithmetic.
+- **The float64 wall.** Around zoom 1e12–1e13 doubles run out of mantissa and
+  the image breaks into flat blocks. Next step: perturbation theory with a
+  reference orbit.
 - **No smooth colouring.** The palette indexes the integer iteration count, so
-  banding is visible. `n + 1 − log₂(log|z|)` is three lines on each side, but the
-  kernel would have to return `|z|²` as well.
-- **A mutex that serializes.** In the Go `grid` strategy the mutex wraps the whole
-  tile computation rather than the pixel write, so the workers serialize.
-  Invisible single-threaded, costly anywhere else.
-- **2.9 MB × 6.** Every worker loads its own copy of the full Go runtime. TinyGo,
-  or a hand-written kernel with no runtime, would bring that down to tens of KB.
+  banding is visible. `n + 1 − log₂(log|z|)` is three lines on each side, but
+  the kernel would have to return `|z|²` as well.
+- **1.9 MB × 6.** Every worker still loads its own copy of the Go runtime
+  (down from 2.9 MB after `-ldflags="-s -w"` and deleting the PNG encoder).
+  TinyGo would bring it down to tens of kilobytes.
 - **`SharedArrayBuffer`.** With COOP/COEP headers a single shared memory would
-  replace the six instances, and tiles could be written straight into the final
-  buffer.
-- **Ship raw RGBA.** The obvious win: return the bytes from linear memory instead
-  of a base64 PNG, and delete the boundary this project spent its time measuring.
+  replace the six instances, and bands could be written straight into the
+  final buffer.
+- **DevicePixelRatio.** The canvas backing store is the logical size, so the
+  image is stretched on Retina displays. Rendering at DPR would double the
+  workload — and would have to be measured again.
 
 ## Stack
 
-Go 1.21 (stdlib only, `syscall/js`) · TypeScript · React 18 · Vite 6 ·
+Go 1.24 (stdlib only, `syscall/js`) · TypeScript · React 18 · Vite 5 ·
 Tailwind CSS v4 · Web Workers.
 
 The project started life from the [wasm-react](https://github.com/akshays-repo/wasm-react)

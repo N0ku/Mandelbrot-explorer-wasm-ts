@@ -1,59 +1,26 @@
 import { motion } from "framer-motion";
+import type { EngineStats } from "../hooks/useStats";
 
-interface Stats {
-  totalGenerationTime: number;
-  averageGenerationTime: number;
-  averageTaskTime: number;
-  totalIterations: number;
-  generationCount: number;
-  pixelExecutions: number;
-  rowExecutions: number;
-  gridExecutions: number;
-  columnExecutions: number;
-  autoExecutions: number;
-  taskCount: number;
-  bestTime: number;
-  worstTime: number;
-  lastGenerationTime: number;
-  systemInfo: {
-    cores: number;
-    userAgent: string;
-    platform: string;
-  };
-}
+// v2 — one honest window: dispatch → last putImageData, measured by the
+// engine. Workers used are displayed (6 wasm instances vs 1 TS worker is part
+// of the story, not something to hide). The per-strategy counters are gone
+// with the strategies themselves.
 
 interface StatsPanelProps {
   show: boolean;
-  stats: Stats;
+  stats: EngineStats;
   panX: number;
   panY: number;
   zoom: number;
   onReset: () => void;
 }
 
-export function StatsPanel({
-  show,
-  stats,
-  panX,
-  panY,
-  zoom,
-  onReset,
-}: StatsPanelProps) {
+export function StatsPanel({ show, stats, panX, panY, zoom, onReset }: StatsPanelProps) {
   if (!show) return null;
 
   const formatTime = (time: number) => {
     if (time === Number.MAX_VALUE) return "N/A";
     return `${time.toFixed(2)} ms`;
-  };
-
-  const getTotalModeExecutions = () => {
-    return (
-      stats.pixelExecutions +
-      stats.rowExecutions +
-      stats.gridExecutions +
-      stats.columnExecutions +
-      stats.autoExecutions
-    );
   };
 
   return (
@@ -79,12 +46,14 @@ export function StatsPanel({
         <h3 className="text-sm font-bold mb-1">System Info</h3>
         <div className="text-xs space-y-1">
           <div>
-            CPU Cores:{" "}
-            <span className="font-mono">{stats.systemInfo.cores}</span>
+            CPU Cores: <span className="font-mono">{stats.systemInfo.cores}</span>
           </div>
           <div>
-            Platform:{" "}
-            <span className="font-mono">{stats.systemInfo.platform}</span>
+            Workers Used:{" "}
+            <span className="font-mono">{stats.workers > 0 ? stats.workers : "—"}</span>
+          </div>
+          <div>
+            Platform: <span className="font-mono">{stats.systemInfo.platform}</span>
           </div>
         </div>
       </div>
@@ -105,128 +74,38 @@ export function StatsPanel({
         </div>
       </div>
 
-      {/* Performance Metrics */}
-      <div className="grid grid-cols-2 gap-4 text-sm mb-3">
+      {/* Performance Metrics — window: dispatch → last putImageData */}
+      <div className="grid grid-cols-2 gap-4 text-sm">
         <div className="space-y-2">
           <div className="flex justify-between">
             <span>Last Generation:</span>
-            <span className="font-mono text-green-400">
-              {formatTime(stats.lastGenerationTime)}
-            </span>
+            <span className="font-mono text-green-400">{formatTime(stats.lastMs)}</span>
           </div>
           <div className="flex justify-between">
             <span>Average Time:</span>
-            <span className="font-mono">
-              {formatTime(stats.averageGenerationTime)}
-            </span>
+            <span className="font-mono">{formatTime(stats.averageMs)}</span>
           </div>
           <div className="flex justify-between">
             <span>Best Time:</span>
-            <span className="font-mono text-green-400">
-              {formatTime(stats.bestTime)}
-            </span>
+            <span className="font-mono text-green-400">{formatTime(stats.bestMs)}</span>
           </div>
           <div className="flex justify-between">
             <span>Worst Time:</span>
-            <span className="font-mono text-red-400">
-              {formatTime(stats.worstTime)}
-            </span>
+            <span className="font-mono text-red-400">{formatTime(stats.worstMs)}</span>
           </div>
         </div>
         <div className="space-y-2">
           <div className="flex justify-between">
             <span>Total Time:</span>
-            <span className="font-mono">
-              {formatTime(stats.totalGenerationTime)}
-            </span>
-          </div>
-          <div className="flex justify-between">
-            <span>Avg Task Time:</span>
-            <span className="font-mono">
-              {formatTime(stats.averageTaskTime)}
-            </span>
-          </div>
-          <div className="flex justify-between">
-            <span>Total Iterations:</span>
-            <span className="font-mono">
-              {stats.totalIterations.toLocaleString()}
-            </span>
+            <span className="font-mono">{formatTime(stats.totalMs)}</span>
           </div>
           <div className="flex justify-between">
             <span>Generations:</span>
             <span className="font-mono">{stats.generationCount}</span>
           </div>
-        </div>
-      </div>
-
-      {/* Execution modes */}
-      <div className="pt-3 border-t border-gray-700">
-        <h3 className="text-sm font-bold mb-2">Executions per Mode</h3>
-        <div className="grid grid-cols-3 gap-2 text-xs">
-          <div className="flex flex-col items-center p-2 bg-gray-800 rounded">
-            <div className="font-bold text-blue-400">Pixel</div>
-            <div className="font-mono">{stats.pixelExecutions}</div>
-            <div className="text-gray-500 text-xs">
-              {getTotalModeExecutions() > 0
-                ? `${(
-                    (stats.pixelExecutions / getTotalModeExecutions()) *
-                    100
-                  ).toFixed(1)}%`
-                : "0%"}
-            </div>
-          </div>
-          <div className="flex flex-col items-center p-2 bg-gray-800 rounded">
-            <div className="font-bold text-green-400">Row</div>
-            <div className="font-mono">{stats.rowExecutions}</div>
-            <div className="text-gray-500 text-xs">
-              {getTotalModeExecutions() > 0
-                ? `${(
-                    (stats.rowExecutions / getTotalModeExecutions()) *
-                    100
-                  ).toFixed(1)}%`
-                : "0%"}
-            </div>
-          </div>
-          <div className="flex flex-col items-center p-2 bg-gray-800 rounded">
-            <div className="font-bold text-purple-400">Grid</div>
-            <div className="font-mono">{stats.gridExecutions}</div>
-            <div className="text-gray-500 text-xs">
-              {getTotalModeExecutions() > 0
-                ? `${(
-                    (stats.gridExecutions / getTotalModeExecutions()) *
-                    100
-                  ).toFixed(1)}%`
-                : "0%"}
-            </div>
-          </div>
-          <div className="flex flex-col items-center p-2 bg-gray-800 rounded">
-            <div className="font-bold text-yellow-400">Column</div>
-            <div className="font-mono">{stats.columnExecutions}</div>
-            <div className="text-gray-500 text-xs">
-              {getTotalModeExecutions() > 0
-                ? `${(
-                    (stats.columnExecutions / getTotalModeExecutions()) *
-                    100
-                  ).toFixed(1)}%`
-                : "0%"}
-            </div>
-          </div>
-          <div className="flex flex-col items-center p-2 bg-gray-800 rounded">
-            <div className="font-bold text-orange-400">Auto</div>
-            <div className="font-mono">{stats.autoExecutions}</div>
-            <div className="text-gray-500 text-xs">
-              {getTotalModeExecutions() > 0
-                ? `${(
-                    (stats.autoExecutions / getTotalModeExecutions()) *
-                    100
-                  ).toFixed(1)}%`
-                : "0%"}
-            </div>
-          </div>
-          <div className="flex flex-col items-center p-2 bg-gray-800 rounded">
-            <div className="font-bold text-gray-400">Tasks</div>
-            <div className="font-mono">{stats.taskCount}</div>
-            <div className="text-gray-500 text-xs">Total</div>
+          <div className="flex justify-between">
+            <span>Total Iterations:</span>
+            <span className="font-mono">{stats.totalIterations.toLocaleString()}</span>
           </div>
         </div>
       </div>

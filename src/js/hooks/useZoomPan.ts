@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef } from "react";
+import { useCallback, useEffect, useReducer, useRef, useState } from "react";
 
 export interface ZoomPanState {
   zoom: number;
@@ -6,168 +6,185 @@ export interface ZoomPanState {
   panY: number;
 }
 
+// v2 — pointer events + native wheel, gesture-based.
+// The view lives in a ref (updated synchronously, mirrored to renders with a
+// forced re-render) so callers can read a fresh state right after a change —
+// commit() at gesture end never sees a stale view.
+//
+// Screen ↔ world mapping (must stay consistent with the kernels and the CSS
+// transform in FractalExplorer): world = ((p − 0.5)·4)/zoom + pan, i.e. the
+// frame spans 4/zoom world units and one world unit is size·zoom/4 px.
+
 interface UseZoomPanProps {
   size: number;
-  onInteractionStart: () => void;
-  onInteractionEnd: () => void;
   initialZoom?: number;
   initialPanX?: number;
   initialPanY?: number;
+  /** Stationary element the fractal frame occupies — the zoom-anchor space. */
+  anchorRef: React.RefObject<HTMLElement | null>;
+  /** Element receiving wheel events (native listener, passive: false). */
+  wheelTargetRef: React.RefObject<HTMLElement | null>;
+  /** Called once per settled gesture: drag end, wheel idle, coalesced keys. */
+  onGestureEnd: () => void;
 }
 
 export function useZoomPan({
-  onInteractionStart,
-  onInteractionEnd,
-  initialZoom = 250.0,
-  initialPanX = 0.0,
-  initialPanY = 0.0,
+  size,
+  initialZoom = 1,
+  initialPanX = 0,
+  initialPanY = 0,
+  anchorRef,
+  wheelTargetRef,
+  onGestureEnd,
 }: UseZoomPanProps) {
-  const [zoom, setZoom] = useState(initialZoom);
-  const [panX, setPanX] = useState(initialPanX);
-  const [panY, setPanY] = useState(initialPanY);
+  const viewRef = useRef<ZoomPanState>({
+    zoom: initialZoom,
+    panX: initialPanX,
+    panY: initialPanY,
+  });
+  const [, force] = useReducer((c: number) => c + 1, 0);
+  const [isDragging, setIsDragging] = useState(false);
   const [mousePosition, setMousePosition] = useState({ x: 0.5, y: 0.5 });
-  const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
 
-  const isDraggingRef = useRef(false);
-  const lastPositionRef = useRef({ x: 0, y: 0 });
-  const lastPanRef = useRef({ x: 0, y: 0 });
+  const sizeRef = useRef(size);
+  sizeRef.current = size;
+  const onGestureEndRef = useRef(onGestureEnd);
+  onGestureEndRef.current = onGestureEnd;
 
-  const zoomAtPoint = useCallback(
-    (zoomFactor: number, pointX: number = 0.5, pointY: number = 0.5) => {
-      onInteractionStart();
+  const dragRef = useRef<{
+    pointerId: number;
+    startX: number;
+    startY: number;
+    panX: number;
+    panY: number;
+    zoom: number;
+  } | null>(null);
+  const settleTimerRef = useRef<number | null>(null);
 
-      const worldX = ((pointX - 0.5) * 4) / zoom + panX;
-      const worldY = ((pointY - 0.5) * 4) / zoom + panY;
+  const setView = useCallback((next: ZoomPanState) => {
+    viewRef.current = { ...next };
+    force();
+  }, []);
 
-      const newZoom = zoom * zoomFactor;
+  /** Debounced gesture end — each call pushes the settle further out. */
+  const scheduleSettle = useCallback((delay = 120) => {
+    if (settleTimerRef.current !== null) clearTimeout(settleTimerRef.current);
+    settleTimerRef.current = window.setTimeout(() => {
+      settleTimerRef.current = null;
+      onGestureEndRef.current();
+    }, delay);
+  }, []);
 
-      const newPanX = worldX - ((pointX - 0.5) * 4) / newZoom;
-      const newPanY = worldY - ((pointY - 0.5) * 4) / newZoom;
+  const zoomAtPoint = useCallback((factor: number, px = 0.5, py = 0.5) => {
+    const v = viewRef.current;
+    const worldX = ((px - 0.5) * 4) / v.zoom + v.panX;
+    const worldY = ((py - 0.5) * 4) / v.zoom + v.panY;
+    const zoom = v.zoom * factor;
+    viewRef.current = {
+      zoom,
+      panX: worldX - ((px - 0.5) * 4) / zoom,
+      panY: worldY - ((py - 0.5) * 4) / zoom,
+    };
+    force();
+  }, []);
 
-      setZoom(newZoom);
-      setPanX(newPanX);
-      setPanY(newPanY);
+  const moveInDirection = useCallback((dir: "up" | "down" | "left" | "right") => {
+    const v = viewRef.current;
+    const step = 0.05 / v.zoom;
+    viewRef.current = {
+      ...v,
+      panX: v.panX + (dir === "left" ? -step : dir === "right" ? step : 0),
+      panY: v.panY + (dir === "up" ? -step : dir === "down" ? step : 0),
+    };
+    force();
+  }, []);
 
-      onInteractionEnd();
+  const anchorFraction = useCallback(
+    (clientX: number, clientY: number) => {
+      const rect = anchorRef.current?.getBoundingClientRect();
+      if (!rect || rect.width === 0) return { x: 0.5, y: 0.5 };
+      return {
+        x: (clientX - rect.left) / rect.width,
+        y: (clientY - rect.top) / rect.height,
+      };
     },
-    [zoom, panX, panY, onInteractionStart, onInteractionEnd]
+    [anchorRef]
   );
 
-  const handleWheel = useCallback(
-    (
-      e: React.WheelEvent<HTMLDivElement>,
-      containerRef: React.RefObject<HTMLDivElement | null>
-    ) => {
-      const rect = containerRef.current?.getBoundingClientRect();
-      if (!rect) return;
+  // Wheel must be a NATIVE non-passive listener: React registers wheel
+  // passively, so preventDefault from a React handler is ignored.
+  useEffect(() => {
+    const el = wheelTargetRef.current;
+    if (!el) return;
+    const onWheel = (e: WheelEvent) => {
+      e.preventDefault();
+      const { x, y } = anchorFraction(e.clientX, e.clientY);
+      // Trackpad pinch arrives as wheel+ctrlKey — steeper response curve.
+      const factor =
+        e.ctrlKey || e.metaKey ? Math.exp(-e.deltaY * 0.01) : Math.pow(1.0015, -e.deltaY);
+      zoomAtPoint(factor, x, y);
+      scheduleSettle(120);
+    };
+    el.addEventListener("wheel", onWheel, { passive: false });
+    return () => el.removeEventListener("wheel", onWheel);
+  }, [anchorFraction, zoomAtPoint, scheduleSettle, wheelTargetRef]);
 
-      const mouseX = (e.clientX - rect.left) / rect.width;
-      const mouseY = (e.clientY - rect.top) / rect.height;
+  const onPointerDown = useCallback((e: React.PointerEvent) => {
+    if (e.button !== 0) return;
+    const v = viewRef.current;
+    dragRef.current = {
+      pointerId: e.pointerId,
+      startX: e.clientX,
+      startY: e.clientY,
+      panX: v.panX,
+      panY: v.panY,
+      zoom: v.zoom,
+    };
+    (e.currentTarget as Element).setPointerCapture(e.pointerId);
+    setIsDragging(true);
+  }, []);
 
-      const zoomFactor = e.deltaY > 0 ? 0.9 : 1.1;
-
-      zoomAtPoint(zoomFactor, mouseX, mouseY);
-    },
-    [zoomAtPoint]
-  );
-
-  const handleMouseDown = useCallback(
-    (e: React.MouseEvent) => {
-      onInteractionStart();
-      isDraggingRef.current = true;
-      lastPositionRef.current = { x: e.clientX, y: e.clientY };
-      lastPanRef.current = { x: panX, y: panY };
-      setDragOffset({ x: 0, y: 0 });
-    },
-    [onInteractionStart, panX, panY]
-  );
-
-  const handleMouseMove = useCallback(
-    (
-      e: React.MouseEvent,
-      containerRef: React.RefObject<HTMLDivElement | null>,
-      size: number
-    ) => {
-      if (!isDraggingRef.current) {
-        const rect = containerRef.current?.getBoundingClientRect();
-        if (rect) {
-          const mouseX = (e.clientX - rect.left) / rect.width;
-          const mouseY = (e.clientY - rect.top) / rect.height;
-          setMousePosition({ x: mouseX, y: mouseY });
-        }
+  const onPointerMove = useCallback(
+    (e: React.PointerEvent) => {
+      const d = dragRef.current;
+      if (!d) {
+        setMousePosition(anchorFraction(e.clientX, e.clientY));
+        return;
       }
-
-      if (!isDraggingRef.current) return;
-
-      onInteractionStart();
-
-      const deltaXPixels = e.clientX - lastPositionRef.current.x;
-      const deltaYPixels = e.clientY - lastPositionRef.current.y;
-
-      setDragOffset({
-        x: deltaXPixels,
-        y: deltaYPixels,
-      });
-
-      // for the multiplacation get
-      const deltaX = (deltaXPixels / size / zoom) * 4;
-      const deltaY = (deltaYPixels / size / zoom) * 4;
-
-      setPanX(lastPanRef.current.x - deltaX);
-      setPanY(lastPanRef.current.y - deltaY);
+      if (e.pointerId !== d.pointerId) return;
+      const perPx = 4 / (sizeRef.current * d.zoom);
+      viewRef.current = {
+        zoom: d.zoom,
+        panX: d.panX - (e.clientX - d.startX) * perPx,
+        panY: d.panY - (e.clientY - d.startY) * perPx,
+      };
+      force();
     },
-    [zoom, onInteractionStart]
+    [anchorFraction]
   );
 
-  const handleMouseUp = useCallback(() => {
-    isDraggingRef.current = false;
-    setDragOffset({ x: 0, y: 0 });
-    onInteractionEnd();
-  }, [onInteractionEnd]);
-
-  const moveInDirection = useCallback(
-    (direction: "up" | "down" | "left" | "right") => {
-      const moveFactor = 0.05 / zoom;
-      onInteractionStart();
-
-      switch (direction) {
-        case "up":
-          setPanY((prev) => prev - moveFactor);
-          break;
-        case "down":
-          setPanY((prev) => prev + moveFactor);
-          break;
-        case "left":
-          setPanX((prev) => prev - moveFactor);
-          break;
-        case "right":
-          setPanX((prev) => prev + moveFactor);
-          break;
-      }
-
-      onInteractionEnd();
-    },
-    [zoom, onInteractionStart, onInteractionEnd]
-  );
+  const onPointerUp = useCallback((e: React.PointerEvent) => {
+    const d = dragRef.current;
+    if (!d || e.pointerId !== d.pointerId) return;
+    dragRef.current = null;
+    setIsDragging(false);
+    onGestureEndRef.current();
+  }, []);
 
   return {
-    zoom,
-    panX,
-    panY,
+    view: viewRef.current,
+    viewRef,
+    isDragging,
     mousePosition,
-    dragOffset,
-    isDraggingRef,
     zoomAtPoint,
-    handleWheel,
-    handleMouseDown,
-    handleMouseMove,
-    handleMouseUp,
     moveInDirection,
-    getState: useCallback(() => ({ zoom, panX, panY }), [zoom, panX, panY]),
-    setState: useCallback((state: ZoomPanState) => {
-      setZoom(state.zoom);
-      setPanX(state.panX);
-      setPanY(state.panY);
-    }, []),
+    setView,
+    scheduleSettle,
+    pointerHandlers: {
+      onPointerDown,
+      onPointerMove,
+      onPointerUp,
+      onPointerCancel: onPointerUp,
+    },
   };
 }

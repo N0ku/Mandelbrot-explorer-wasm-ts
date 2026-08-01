@@ -350,9 +350,6 @@ export async function generateFractalTS(
   fractalType: "pixel" | "row" | "column" | "grid" | "auto",
   params: FractalParams
 ): Promise<Uint8ClampedArray> {
-  console.log(`Generating fractal using ${fractalType.toUpperCase()} strategy`);
-
-  const startTime = performance.now();
   let result: Uint8ClampedArray;
 
   switch (fractalType) {
@@ -374,13 +371,6 @@ export async function generateFractalTS(
     default:
       result = generatePixelFractal(params);
   }
-
-  const endTime = performance.now();
-  console.log(
-    `TypeScript ${fractalType.toUpperCase()} generation time: ${(
-      endTime - startTime
-    ).toFixed(2)} ms`
-  );
 
   return result;
 }

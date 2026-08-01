@@ -1,9 +1,11 @@
 import React from "react";
 import { motion } from "framer-motion";
 
+// v2 — the strategy selector is gone: scheduling strategies never changed a
+// pixel, parallelism lives in the worker pool now. Iterations are the actual
+// depth used by the engines (shared adaptive formula, or an ?iter= override).
+
 interface ControlsPanelProps {
-  fractalType: "pixel" | "row" | "grid" | "column" | "auto";
-  setFractalType: (type: "pixel" | "row" | "grid" | "column" | "auto") => void;
   zoom: number;
   size: number;
   setSize: (size: number) => void;
@@ -21,8 +23,6 @@ interface ControlsPanelProps {
 }
 
 export function ControlsPanel({
-  fractalType,
-  setFractalType,
   zoom,
   size,
   setSize,
@@ -57,30 +57,8 @@ export function ControlsPanel({
 
       <div className="grid grid-cols-2 gap-3">
         <div>
-          <label htmlFor="fractalType" className="block text-sm mb-1">
-            Type of Fractal:
-          </label>
-          <select
-            id="fractalType"
-            value={fractalType}
-            onChange={(e) =>
-              setFractalType(
-                e.target.value as "pixel" | "row" | "grid" | "column" | "auto"
-              )
-            }
-            className="w-full p-1 bg-gray-800 rounded text-sm"
-          >
-            <option value="pixel">Pixel</option>
-            <option value="row">Row</option>
-            <option value="grid">Grid</option>
-            <option value="column">Column</option>
-            <option value="auto">Auto</option>
-          </select>
-        </div>
-
-        <div>
           <label htmlFor="iterations" className="block text-sm mb-1">
-            Iterations Parameter:
+            Iterations:
           </label>
           <input
             type="number"
@@ -107,7 +85,7 @@ export function ControlsPanel({
               min="0.1"
               max="10"
               step="0.1"
-              value={zoom}
+              value={Math.min(10, Math.max(0.1, zoom))}
               onChange={(e) => {
                 const newZoom = parseFloat(e.target.value);
                 const factor = newZoom / zoom;
@@ -138,8 +116,26 @@ export function ControlsPanel({
           <label htmlFor="isJulia">Enable Julia</label>
         </div>
 
+        <div className="mt-2">
+          <label htmlFor="imageSize" className="block text-sm mb-1">
+            Image Size: {size}×{size} px
+          </label>
+          <select
+            id="imageSize"
+            value={size}
+            onChange={(e) => setSize(parseInt(e.target.value))}
+            className="w-full p-1 bg-gray-800 rounded text-sm"
+          >
+            <option value="500">500×500 (Small)</option>
+            <option value="800">800×800 (Medium)</option>
+            <option value="1000">1000×1000 (Large)</option>
+            <option value="1500">1500×1500 (XL)</option>
+            <option value="2000">2000×2000 (XXL)</option>
+          </select>
+        </div>
+
         {isJulia && (
-          <div className="grid grid-cols-2 gap-3 mt-2">
+          <div className="col-span-2 grid grid-cols-2 gap-3 mt-2">
             <div>
               <label htmlFor="juliaRe" className="block text-sm mb-1">
                 Julia Re:
@@ -168,31 +164,13 @@ export function ControlsPanel({
             </div>
           </div>
         )}
-
-        <div className="col-span-2 mt-2">
-          <label htmlFor="imageSize" className="block text-sm mb-1">
-            Image Size: {size}×{size} px
-          </label>
-          <select
-            id="imageSize"
-            value={size}
-            onChange={(e) => setSize(parseInt(e.target.value))}
-            className="w-full p-1 bg-gray-800 rounded text-sm"
-          >
-            <option value="500">500×500 (Small)</option>
-            <option value="800">800×800 (Medium)</option>
-            <option value="1000">1000×1000 (Large)</option>
-            <option value="1500">1500×1500 (XL)</option>
-            <option value="2000">2000×2000 (XXL)</option>
-          </select>
-        </div>
       </div>
 
       <div className="mt-2 text-xs text-gray-400">
-        <p>Scroll for zoom and click, drag to move !</p>
+        <p>Drag to pan, scroll (or pinch) to zoom at the cursor.</p>
         <p>
-          Touches: R (reset), + (zoom+), - (zoom-), S (stats), B (back), N
-          (next)
+          Keys: R (reset), + / - (zoom), S (stats), B (back), N (next), J
+          (julia)
         </p>
       </div>
     </motion.div>
