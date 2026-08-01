@@ -8,8 +8,10 @@
 A Mandelbrot and Julia explorer built to answer one question honestly: **is
 WebAssembly compiled from Go actually faster than plain TypeScript?**
 
-A project I worked on as part of our Technology Watch Report with my classmates: 
-[TODO]
+A project I worked on as part of our Technology Watch Report with my classmates:
+[Loule95450](https://github.com/Loule95450),
+[Jerance](https://github.com/Jerance) and
+[HugoTres93](https://github.com/HugoTres93).
 
 The same escape-time kernel is written twice: once in Go, once as a
 line-for-line TypeScript transcription, and each engine lives on its own route.
@@ -189,6 +191,18 @@ Tailwind CSS v4 · Web Workers.
 
 The project started life from the [wasm-react](https://github.com/akshays-repo/wasm-react)
 template, which supplied the initial Go + React + `wasm_exec.js` wiring.
+
+## Contributors
+
+<a href="https://github.com/N0ku"><img src="https://github.com/N0ku.png" width="60" height="60" alt="N0ku" /></a>
+<a href="https://github.com/Loule95450"><img src="https://github.com/Loule95450.png" width="60" height="60" alt="Loule95450" /></a>
+<a href="https://github.com/Jerance"><img src="https://github.com/Jerance.png" width="60" height="60" alt="Jerance" /></a>
+<a href="https://github.com/HugoTres93"><img src="https://github.com/HugoTres93.png" width="60" height="60" alt="HugoTres93" /></a>
+
+[N0ku](https://github.com/N0ku) ·
+[Loule95450](https://github.com/Loule95450) ·
+[Jerance](https://github.com/Jerance) ·
+[HugoTres93](https://github.com/HugoTres93)
 
 ## Licence
 
