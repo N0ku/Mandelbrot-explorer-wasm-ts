@@ -1,10 +1,15 @@
-# Mandelbrot Explorer — Go/WebAssembly vs TypeScript
+# Mandelbrot Explorer: Go/WebAssembly vs TypeScript
+
+![TypeScript](https://img.shields.io/badge/typescript-%23007ACC.svg?style=for-the-badge&logo=typescript&logoColor=white)
+![WebAssembly](https://img.shields.io/badge/webassembly-%23654FF0.svg?style=for-the-badge&logo=webassembly&logoColor=white)
+![Go](https://img.shields.io/badge/go-%2300ADD8.svg?style=for-the-badge&logo=go&logoColor=white)
+![React](https://img.shields.io/badge/react-%2320232a.svg?style=for-the-badge&logo=react&logoColor=%2361DAFB)
 
 A Mandelbrot and Julia explorer built to answer one question honestly: **is
 WebAssembly compiled from Go actually faster than plain TypeScript?**
 
-The same escape-time kernel is written twice — once in Go, once as a
-line-for-line TypeScript transcription — and each engine lives on its own route.
+The same escape-time kernel is written twice: once in Go, once as a
+line-for-line TypeScript transcription, and each engine lives on its own route.
 The whole view (position, zoom, strategy, Julia constant) is encoded in the
 query string, so the exact same frame can be replayed on both engines and timed.
 
@@ -125,7 +130,7 @@ clamping, so it can read 9845 where the engine actually runs 2000.
 ## Parallelism: the trap and the answer
 
 Under `GOOS=js GOARCH=wasm` **the Go runtime is single-threaded**. The `row`
-strategy spawns one goroutine per row — 1000 goroutines for a 1000 px frame —
+strategy spawns one goroutine per row - 1000 goroutines for a 1000 px frame
 and buys exactly nothing in throughput.
 
 The answer had to be architectural: **six complete WASM instances, one per Web
