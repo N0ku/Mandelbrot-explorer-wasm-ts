@@ -58,6 +58,21 @@ function readInitialParams() {
 }
 
 /**
+ * ImageData's constructor wants pixels backed by a plain ArrayBuffer, while a
+ * Uint8ClampedArray is typed as possibly sitting on a SharedArrayBuffer. Ours
+ * never does — every tile allocates its own buffer and hands it over — but no
+ * type can carry that guarantee across the worker boundary.
+ *
+ * Reading the expected parameter off the constructor keeps this compiling
+ * whether or not the installed lib.dom types typed arrays generically over
+ * their buffer. It is a cast and nothing else: no copy, no allocation, which
+ * matters because both call sites run inside the measured window.
+ */
+type ImageDataPixels = ConstructorParameters<typeof ImageData>[0];
+const toImageData = (pixels: Uint8ClampedArray, w: number, h: number) =>
+  new ImageData(pixels as unknown as ImageDataPixels, w, h);
+
+/**
  * How many bands of the current pass have been painted. Exposed on `window`
  * so the screenshot tooling can catch a frame while it is still streaming;
  * incrementing an integer costs nothing in the measured window.
@@ -214,7 +229,7 @@ export function FractalExplorer({ engineName, createWorker, poolSize, urlExtras 
     if (pctx) {
       const pms = await engine.render(pView, {
         bands: 1,
-        paint: (t) => pctx.putImageData(new ImageData(t.pixels, t.w, t.h), t.x0, t.y0),
+        paint: (t) => pctx.putImageData(toImageData(t.pixels, t.w, t.h), t.x0, t.y0),
       });
       if (pms === null || my !== frameSeqRef.current) return;
       ctx.drawImage(pc, 0, 0, pSize, pSize, 0, 0, c.size, c.size);
@@ -230,7 +245,7 @@ export function FractalExplorer({ engineName, createWorker, poolSize, urlExtras 
     const ms = await engine.render(target, {
       bands: poolSize === 1 ? 1 : poolSize * 2,
       paint: (t) => {
-        ctx.putImageData(new ImageData(t.pixels, t.w, t.h), t.x0, t.y0);
+        ctx.putImageData(toImageData(t.pixels, t.w, t.h), t.x0, t.y0);
         tileCounter.painted++;
       },
     });
@@ -241,7 +256,7 @@ export function FractalExplorer({ engineName, createWorker, poolSize, urlExtras 
       `${target.isJulia ? "julia" : "mandelbrot"} ${c.size}px rendered in ${ms.toFixed(2)}ms — ` +
         `${poolSize} worker${poolSize > 1 ? "s" : ""}, ${maxIter} iterations`
     );
-  }, [engine.isReady, engine.render, poolSize, recordGeneration, viewRef]);
+  }, [engine, poolSize, recordGeneration, viewRef]);
 
   const writeUrl = useCallback(() => {
     const v = viewRef.current;
@@ -363,7 +378,7 @@ export function FractalExplorer({ engineName, createWorker, poolSize, urlExtras 
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [zoomPan.zoomAtPoint, zoomPan.moveInDirection, zoomPan.setView, zoomPan.scheduleSettle, zoomPan.mousePosition, goBack, goForward]);
+  }, [zoomPan.zoomAtPoint, zoomPan.moveInDirection, zoomPan.setView, zoomPan.scheduleSettle, zoomPan.mousePosition, goBack, goForward, zoomPan]);
 
   const handleGoBack = () => {
     const prev = goBack();
@@ -388,7 +403,7 @@ export function FractalExplorer({ engineName, createWorker, poolSize, urlExtras 
       zoomPan.zoomAtPoint(factor, 0.5, 0.5);
       zoomPan.scheduleSettle(150);
     },
-    [zoomPan.zoomAtPoint, zoomPan.scheduleSettle]
+    [zoomPan]
   );
 
   // Download straight from the mounted canvas — outside any timed path.
@@ -511,7 +526,7 @@ export function FractalExplorer({ engineName, createWorker, poolSize, urlExtras 
         />
       </div>
 
-      <div className="fixed z-30 pointer-events-none bottom-[7rem] left-1/2 -translate-x-1/2 hud:bottom-5 hud:left-auto hud:right-5 hud:translate-x-0">
+      <div className="fixed z-30 pointer-events-none bottom-28 left-1/2 -translate-x-1/2 hud:bottom-5 hud:left-auto hud:right-5 hud:translate-x-0">
         <ReadoutPanel
           zoom={view.zoom}
           size={size}
